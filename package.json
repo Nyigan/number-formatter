@@ -1,5 +1,5 @@
 {
-  "name": "number-formatter",
+  "name": "@towett/number-formatter",
   "version": "0.1.0",
   "description": "Simple nodejs number formatter",
   "main": "index.js",
