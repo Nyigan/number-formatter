@@ -1,0 +1,31 @@
+{
+  "name": "number-formatter",
+  "version": "0.1.0",
+  "description": "Simple nodejs number formatter",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --reporter spec"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nyigan/number-formatter.git"
+  },
+  "engines": {
+    "node": ">=4.2.4"
+  },
+  "keywords": [
+    "simple",
+    "number",
+    "formatter"
+  ],
+  "author": "Franklin Towett <http://towett.com> (http://towett.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Nyigan/number-formatter/issues"
+  },
+  "homepage": "https://github.com/Nyigan/number-formatter#readme",
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "mocha": "^4.0.1"
+  }
+}
