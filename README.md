@@ -1,9 +1,8 @@
-# number-formatter
-Number Formatter
+[![Coverage Status](https://coveralls.io/repos/github/Nyigan/number-formatter/badge.svg?branch=master)](https://coveralls.io/github/Nyigan/number-formatter?branch=master)
+
+#Number Formatter
 =========
 
-  [![Coverage Status](https://coveralls.io/repos/github/Nyigan/number-formatter/badge.svg?branch=master)](https://coveralls.io/github/Nyigan/number-formatter?branch=master)
-  
 A small library that adds commas to numbers
 
 ## Installation
