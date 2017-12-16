@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/Nyigan/number-formatter.svg?branch=master)](https://travis-ci.org/Nyigan/number-formatter)
 [![Coverage Status](https://coveralls.io/repos/github/Nyigan/number-formatter/badge.svg?branch=master)](https://coveralls.io/github/Nyigan/number-formatter?branch=master)
 
 ## Number Formatter
