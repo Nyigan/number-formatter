@@ -17,7 +17,8 @@
   "keywords": [
     "simple",
     "number",
-    "formatter"
+    "formatter",
+    "comma separated numbers"
   ],
   "author": "Franklin Towett <http://towett.com> (http://towett.com)",
   "license": "MIT",
@@ -29,6 +30,11 @@
     "chai": "^4.1.2",
     "coveralls": "^3.0.0",
     "istanbul": "^0.4.5",
-    "mocha": "^4.0.1"
+    "mocha": "^5.1.1"
+  },
+  "dependencies": {
+    "boom": "^7.2.0",
+    "browser-stdout": "^1.3.1",
+    "hoek": "^5.0.3"
   }
 }
