@@ -28,13 +28,13 @@
   "homepage": "https://github.com/Nyigan/number-formatter#readme",
   "devDependencies": {
     "chai": "^4.2.0",
-    "coveralls": "^3.0.4",
+    "coveralls": "^3.1.0",
     "istanbul": "^0.4.5",
-    "mocha": "^5.2.0"
+    "mocha": "^8.1.1"
   },
   "dependencies": {
     "boom": "^7.3.0",
     "browser-stdout": "^1.3.1",
-    "hoek": "^5.0.4"
+    "hoek": "^6.1.3"
   }
 }
