@@ -1,5 +1,6 @@
 {
     "eslint.enable": false,
     "jscs.enable": false,
-    "tslint.enable": false
+    "tslint.enable": false,
+    "standard.enable": false
 }
