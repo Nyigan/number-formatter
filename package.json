@@ -1,6 +1,6 @@
 {
     "name": "@towett/number-formatter",
-    "version": "0.1.9",
+    "version": "0.1.10",
     "description": "Simple nodejs number formatter",
     "main": "index.js",
     "scripts": {
@@ -30,7 +30,7 @@
         "chai": "^4.3.4",
         "coveralls": "^3.1.1",
         "istanbul": "^0.4.5",
-        "mocha": "^8.4.0"
+        "mocha": "^9.1.2"
     },
     "dependencies": {
         "boom": "^7.3.0",
