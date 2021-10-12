@@ -26,4 +26,4 @@ A small library that adds commas to numbers
 
 ## Contributing
 
-In lieu of a formal style guide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code. Much thanks goes to @jdaudier
+In lieu of a formal style guide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Link and test your code. Much thanks goes to @jdaudier
