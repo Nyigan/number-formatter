@@ -17,7 +17,7 @@ A small library that adds commas to numbers
     var formattedNum = numFormatter(35666);
 
 
-  Output should be `35,666`
+  Output should be `35,654`
 
 
 ## Tests
