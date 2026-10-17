@@ -5,6 +5,8 @@
 
 Format numbers for people, and read them back: thousands separators, currency, percentages, compact (`1.2K`) and file sizes. Locale-aware, zero dependencies, ships TypeScript types. Node 22+, and it works unchanged in browsers.
 
+**[Try it in your browser](https://nyigan.github.io/number-formatter/playground/)** — type a number, pick a locale and options, and see the result.
+
 ## Install
 
 ```sh
@@ -29,6 +31,8 @@ format.percent(0.256);              // '26%'
 format.compact(1234567);            // '1.2M'
 format.signed(12);                  // '+12'
 format.bytes(1536);                 // '1.5 kB'
+format.bytes(1536, 'en', { binary: true });  // '1.5 KiB'
+format.formatRange(1000, 2000);     // '1,000–2,000'
 
 // Missing data in a UI: return a placeholder instead of throwing.
 format(null, 'en-US', { fallback: '—' });   // '—'
@@ -44,12 +48,16 @@ format.parse('$1,234.50', 'en-US', { style: 'currency', currency: 'USD' }); // 1
 format.parse('25.6%', 'en-US', { style: 'percent' });                        // 0.256
 format.parse('1.2K', 'en-US', { notation: 'compact' });                      // 1200
 format.parse('abc', 'en-US', { fallback: NaN });                             // NaN
+
+// Parsing a whole column: validate once, reuse.
+const toEuros = format.createParser('de-DE', { style: 'currency', currency: 'EUR' });
+['1,50 €', '€ 1.000,00', '(2,25 €)'].map(toEuros);   // [1.5, 1000, -2.25]
 ```
 
 TypeScript and ESM imports:
 
 ```ts
-import format, { createFormatter, currency, parse } from '@towett/number-formatter';
+import format, { createFormatter, createParser, currency, parse } from '@towett/number-formatter';
 ```
 
 ## API
@@ -80,7 +88,34 @@ All take `(value, [locale], [options])`, except `currency`, which takes the curr
 | `format.signed(value, ...)` | `signed(12)` | `+12` (zero stays `0`) |
 | `format.bytes(value, ...)` | `bytes(1536)` | `1.5 kB` |
 
-`bytes` uses decimal units (1 kB = 1000 B) from `B` to `PB`, rounds to one decimal and moves up a unit instead of printing `1000 kB`. The unit labels are not localised; the number is.
+`bytes` uses decimal units (1 kB = 1000 B) from `B` to `PB`, rounds to one decimal and moves up a unit instead of printing `1000 kB`. The short labels are not localised; the number is. Two extra options:
+
+| Option | Result |
+|---|---|
+| `{ binary: true }` | 1024-based units labelled `KiB`, `MiB`, ... `PiB`: `bytes(1536, 'en', { binary: true })` is `1.5 KiB`. |
+| `{ unitDisplay: 'long' }` | Localized names from `Intl`: `1.5 kilobytes`, `1,5 Kilobyte`, `1.5 キロバイト`. Decimal units only. |
+
+### `format.formatToParts(value, [locale], [options])`
+
+The same as `format`, but returns the pieces (`integer`, `group`, `decimal`, `currency`, `minusSign`, ...) so you can style them separately, for example a smaller fraction:
+
+```js
+format.formatToParts(1234.56, 'en-US', { style: 'currency', currency: 'USD' })
+  .map((part) => (part.type === 'fraction' ? `<small>${part.value}</small>` : part.value))
+  .join('');                        // '$1,234.<small>56</small>'
+```
+
+With a `fallback`, a missing value gives one `literal` part.
+
+### `format.formatRange(start, end, [locale], [options])`
+
+Writes a range the way the locale does: `formatRange(1000, 2000)` is `1,000–2,000`, `formatRange(5, 10, 'de-DE', { style: 'currency', currency: 'EUR' })` is `5,00–10,00 €`, and equal ends give `~5`. Both ends follow the rules of `format`; with a `fallback`, either end missing returns it.
+
+### `format.createParser([locale], [options])`
+
+Returns `(text) => number`. The locale and options are validated and the locale data looked up once, when you create it, so a typo fails at startup and parsing a long column is as cheap as it can be. The options are read when the parser is created; changing the object afterwards has no effect.
+
+### `fallback`
 
 ### `format.parse(text, [locale], [options])`
 
@@ -112,6 +147,8 @@ format.parse('1234.5', 'de-DE');                   // throws: '.' is a group sep
 
 `parse(format(x, locale, options), locale, options)` returns `x` for the supported options. This is tested across 50 locales, including currencies in every display style, percent and compact notation.
 
+A minus sign after the number (`5-`) is read only in locales that write it there, such as Frisian money; elsewhere it is an error. Across every locale in Node 22 and 24, 18 cases fail to read back because ICU's own compact-notation data is inconsistent (Nepali long and Tongan short words); `parse` reports those as errors instead of guessing.
+
 ### `fallback`
 
 With `fallback` set, the call returns that string instead of throwing when the value is `null`, `undefined`, `NaN`, an infinity or a non-numeric string (`''`, `'N/A'`). Genuine mistakes, such as passing an object or a boolean, still throw.
@@ -120,7 +157,7 @@ With `fallback` set, the call returns that string instead of throwing when the v
 
 - **The default locale is always `en-US`**, not the machine's, so output is the same everywhere.
 - **Decimals are rounded to 3 places** unless you set `maximumFractionDigits`.
-- **`-0` and `'-0'` format as `0`.** A small negative that rounds to zero (`-0.0001`) still prints `-0`; use `maximumFractionDigits` or `signDisplay: 'negative'` if that matters.
+- **Negative zero never prints.** `-0`, `'-0'` and tiny negatives that round to zero (`-0.0001`) all format as `0`. This works by defaulting `signDisplay` to `'negative'`; pass your own `signDisplay` to get something else.
 - **Numbers above `Number.MAX_SAFE_INTEGER` lose precision** in JavaScript itself. Pass a `bigint` or a numeric string to keep every digit.
 - **`parse` follows the locale data of the Node version or browser it runs in.** Locale data is updated between releases (for example, Swiss-French money moved from a narrow space to `'` in newer versions), so text that you store and parse later should be parsed with the same options, or normalised first.
 - **`parse` returns a JavaScript number**, so more than about 15 significant digits lose precision. Compact words and percents are applied exactly: `'25.6%'` is exactly `0.256`.
@@ -139,6 +176,96 @@ With `fallback` set, the call returns that string instead of throwing when the v
 | `parse`: text is empty or not a number | `TypeError` (unless `fallback` is set) |
 | `parse`: more digits than a number can hold | `RangeError` (unless `fallback` is set) |
 
+## Recipes
+
+Every snippet here is run by the test suite (`test/recipes.test.js`), so the outputs are real.
+
+**Table columns.** Build the formatter once, then map over the rows. Fixed decimals keep a column aligned; add `font-variant-numeric: tabular-nums; text-align: right` in CSS.
+
+```js
+const price = format.createFormatter('en-US', { style: 'currency', currency: 'USD' });
+[1234.5, 99, 0.5].map(price);          // ['$1,234.50', '$99.00', '$0.50']
+
+const cell = format.createFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+[1234.5, 99, 0.5].map(cell);           // ['1,234.50', '99.00', '0.50']
+```
+
+**Missing data.** Put `fallback` in the options and `null`, `undefined`, `NaN`, infinities and text like `'n/a'` all become your placeholder. Objects and booleans still throw, because those are bugs.
+
+```js
+const total = format.createFormatter('en-US', { fallback: '—' });
+[total(1200), total(null), total(undefined), total('n/a')];   // ['1,200', '—', '—', '—']
+```
+
+**Form fields.** Read what people typed in their own locale. With `fallback: null` an invalid field gives `null` to test for, rather than an exception to catch.
+
+```js
+const readPrice = format.createParser('de-DE', { style: 'currency', currency: 'EUR', fallback: null });
+readPrice('1.234,50 €');   // 1234.5
+readPrice('oops');         // null
+readPrice('');             // null
+```
+
+Store the number, not the formatted text, and format it again when you show it. Without `fallback`, ambiguous text such as `'12,3,4'` throws a `TypeError` whose message says what was wrong, which is useful for an error message.
+
+**Money held in cents.** Divide at the last moment, only for display.
+
+```js
+format.currency(1999 / 100, 'USD');    // '$19.99'
+```
+
+**Gains and losses.** `signDisplay` is passed to `Intl`, so `exceptZero` shows `+` on gains, `-` on losses and nothing on zero.
+
+```js
+format.percent(0.0512, 'en-US', { signDisplay: 'exceptZero' });    // '+5%'
+format.percent(-0.0512, 'en-US', { signDisplay: 'exceptZero' });   // '-5%'
+```
+
+**Styling the decimals.** `formatToParts` gives the pieces, so you can wrap just the cents.
+
+```js
+format.formatToParts(1234.56, 'en-US')
+  .map((part) => (part.type === 'fraction' ? `<small>${part.value}</small>` : part.value))
+  .join('');                           // '1,234.<small>56</small>'
+```
+
+**File sizes and ranges.**
+
+```js
+format.bytes(5242880);                                           // '5.2 MB'
+format.bytes(1536, 'de-DE', { unitDisplay: 'long' });            // '1,5 Kilobyte'
+format.formatRange(10, 20, 'en-US', { style: 'currency', currency: 'USD' });   // '$10.00 – $20.00'
+```
+
+**The user's own locale.** In a browser, `format(n, navigator.language)` matches what they expect. A locale tag that `Intl` rejects throws a `RangeError`, so for tags from a request header or a form, check first:
+
+```js
+function safeLocale(tag) {
+  try { return Intl.getCanonicalLocales(tag)[0]; } catch { return 'en-US'; }
+}
+format(1234.5, safeLocale(userTag));
+```
+
+## How it compares
+
+Checked on 17 October 2026 by running the same inputs through `numeral` 2.0.6, `accounting` 0.4.1 and this package on Node 22.22, and by reading each package's npm release history. Sizes are the minified file after `gzip -9`; this package was minified with esbuild.
+
+| | `toLocaleString` / `Intl` | this package | `numeral` | `accounting` |
+|---|---|---|---|---|
+| Still maintained | part of the platform | yes | last release March 2017 | last release July 2014 |
+| Locale rules | built in | built in (it uses `Intl`) | load locale files first; choosing one that was not loaded threw a `TypeError` | pass the separators yourself on every call |
+| Read text back into a number | no | `parse`, per locale; ambiguous text throws | `.value()`; `'1.234,56'` gives `1.23456` under the English settings | `unformat`; `'1.234,56'` gives `1.23456` unless you pass the decimal character |
+| `null` | `'0'` | `TypeError`, or your `fallback` | `'0'` | `'0'` |
+| `'12ab'` | `'NaN'` | `TypeError`, or your `fallback` | `'12'` | `'12'` |
+| `9007199254740993n` | exact | exact | `9,007,199,254,740,992` (rounded) | `9,007,199,254,740,992` (rounded) |
+| TypeScript types | in TypeScript's own library | bundled | separate `@types/numeral` | separate `@types/accounting` |
+| Size, minified and gzipped | 0 | 3.8 kB | 4.0 kB (no locale files) | 1.3 kB |
+| Dependencies | none | none | none | none |
+
+**Speed.** Formatting a euro amount for `de-DE` took about 45.6 µs per call with `toLocaleString('de-DE', options)`, because it builds a new formatter every time, against 1.4 µs here, where formatters are cached. The picture is different without options: plain `n.toLocaleString('de-DE')` took 0.48 µs, faster than this package at 1.07 µs, because V8 caches that case itself. Your numbers will differ, so run `npm run check:speed` for the ratios on your machine.
+
+**When plain `Intl` is enough.** If you only turn numbers into text, always have a valid number, and hold on to one `Intl.NumberFormat` per locale and style, you do not need this package. It earns its place when you also read text back, when values may be missing or bad and you want a placeholder or a clear error, when you want the same `-0` and rounding behaviour everywhere, or when you want ready-made `bytes`, `compact` and `signed` helpers without writing them again.
+
 ## Development
 
 ```sh
@@ -146,7 +273,13 @@ npm install
 npm test          # node's built-in test runner
 npm run cover     # c8, requires 100% coverage
 npm run test:types
+npm run check:lock    # fails if package-lock.json is out of step with package.json
+npm run check:size    # fails if the published package grows past its limit
+npm run check:speed   # fails if formatting gets slower relative to plain Intl
+npm run test:browser:install && npm run test:browser   # Chromium, optional
 ```
+
+The playground in `playground/` is a plain HTML page with no build step. Open it from disk, or from GitHub Pages, and it loads `../index.js`.
 
 ## Support
 
@@ -157,7 +290,7 @@ This package is free and MIT-licensed, and it never prints messages or tracks an
   · [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.npmjs.com%2Fpackage%2F%40towett%2Fnumber-formatter)
 - **Shop with me.** My [Etsy shop](https://www.etsy.com/shop/FrankForgeCo) sells editable Canva templates for invitations, flyers and forms. Every sale helps fund the time I spend maintaining this package.
 
-Bug reports, ideas and pull requests are just as welcome. Thank you!
+Bug reports, ideas and pull requests are just as welcome; see [CONTRIBUTING](https://github.com/Nyigan/number-formatter/blob/master/CONTRIBUTING.md). Thank you!
 
 ## License
 

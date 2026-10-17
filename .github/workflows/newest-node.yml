@@ -1,0 +1,27 @@
+name: Newest Node
+
+# Locale data (CLDR) changes between Node releases and can change formatted output.
+# A weekly run against the newest Node (and the current LTS) catches that early.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [lts/*, latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --version && node -p "process.versions.cldr"
+      - run: npm install
+      - run: npm test

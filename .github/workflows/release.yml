@@ -1,0 +1,47 @@
+name: Release
+
+# Publishes to npm with provenance when you push a version tag:
+#   npm version minor    (or patch / major; this creates the commit and the tag)
+#   git push --follow-tags
+#
+# One-time setup: add an npm automation token as the repository secret NPM_TOKEN
+# (GitHub > Settings > Secrets and variables > Actions).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub release
+  id-token: write # lets npm sign the provenance statement
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: The tag must match package.json
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $VERSION" >&2
+            exit 1
+          fi
+      - run: npm test
+      - run: npm run cover
+      - run: npm run test:types
+      - name: Publish (prepublishOnly re-runs the placeholder check)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '/^## /{ found = ($2 == v); next } found' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md

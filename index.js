@@ -4,6 +4,8 @@ const DEFAULT_LOCALE = 'en-US';
 const MAX_CACHED_FORMATTERS = 100;
 const NUMERIC_STRING = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 const BYTE_UNITS = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
+const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+const LONG_BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte'];
 
 /** Marks errors caused by "no usable value", which a `fallback` option is allowed to replace. */
 const SOFT = Symbol('soft');
@@ -28,7 +30,14 @@ function cacheKey(locale, options) {
     typeof locale === 'string' || (Array.isArray(locale) && locale.every((l) => typeof l === 'string'));
   if (!localeKeyable || (options != null && !isPlainObject(options))) return null;
   // Plain string locales without options (the common case) skip JSON serialisation.
-  return options == null && typeof locale === 'string' ? locale : JSON.stringify([locale, options || null]);
+  if (options == null && typeof locale === 'string') return locale;
+  try {
+    return JSON.stringify([locale, options || null]);
+  } catch {
+    // Options that cannot be serialised (a circular reference, a bigint) are not cached; Intl then
+    // decides what to do with them, exactly as it would without this library.
+    return null;
+  }
 }
 
 /** Returns the cached value for `key`, creating it on a miss. A `null` key means "do not cache". */
@@ -46,13 +55,38 @@ function remember(map, key, create) {
   return value;
 }
 
+/**
+ * Intl prints a tiny negative number that rounds to zero as "-0" by default. `signDisplay: 'negative'`
+ * prints "0" and changes nothing else, so it is the default unless the caller picked a sign style.
+ * Object.create keeps inherited option properties working, which a spread would drop.
+ */
+function withDefaults(options) {
+  if (options == null) return { signDisplay: 'negative' };
+  if (options.signDisplay !== undefined) return options;
+  return Object.create(options, { signDisplay: { value: 'negative', enumerable: true } });
+}
+
 function getFormatter(locale, options) {
-  return remember(cache, cacheKey(locale, options), () => new Intl.NumberFormat(locale, options));
+  return remember(cache, cacheKey(locale, options), () => new Intl.NumberFormat(locale, withDefaults(options)));
 }
 
 function soft(error) {
   error[SOFT] = true;
   return error;
+}
+
+/**
+ * Presets first, then the caller's options. A property set to `undefined` counts as absent, as it does
+ * for Intl, so `{ signDisplay: undefined }` does not switch a preset off.
+ */
+function withPreset(preset, options) {
+  const merged = { ...preset };
+  if (options != null) {
+    for (const key of Object.keys(options)) {
+      if (options[key] !== undefined) merged[key] = options[key];
+    }
+  }
+  return merged;
 }
 
 function assertOptions(options) {
@@ -111,15 +145,15 @@ function prepare(value) {
   }
 }
 
-function formatValue(formatter, value, fallback) {
+function formatValue(formatter, value, fallback, parts = false) {
   let prepared;
   try {
     prepared = prepare(value);
   } catch (error) {
-    if (fallback !== undefined && error[SOFT]) return fallback;
+    if (fallback !== undefined && error[SOFT]) return parts ? [{ type: 'literal', value: fallback }] : fallback;
     throw error;
   }
-  return formatter.format(prepared);
+  return parts ? formatter.formatToParts(prepared) : formatter.format(prepared);
 }
 
 /**
@@ -137,6 +171,39 @@ function formatNumber(value, locale, options) {
   const fallback = getFallback(options);
   const formatter = getFormatter(resolveLocale(locale), intlOptions(options, fallback));
   return formatValue(formatter, value, fallback);
+}
+
+/**
+ * Like `format`, but returns the pieces (`integer`, `group`, `decimal`, `currency`, ...) so you can
+ * style them separately. With a `fallback`, a missing value gives a single `literal` part.
+ *
+ * @returns {Intl.NumberFormatPart[]}
+ */
+function formatToParts(value, locale, options) {
+  const fallback = getFallback(options);
+  const formatter = getFormatter(resolveLocale(locale), intlOptions(options, fallback));
+  return formatValue(formatter, value, fallback, true);
+}
+
+/**
+ * Formats a range such as `1,000–2,000` or `$5–$10` the way the locale writes it. Equal ends give
+ * `~5`. Both ends follow the same rules as `format`; with a `fallback`, either end missing returns it.
+ *
+ * @returns {string}
+ */
+function formatRange(start, end, locale, options) {
+  const fallback = getFallback(options);
+  const formatter = getFormatter(resolveLocale(locale), intlOptions(options, fallback));
+  let from;
+  let to;
+  try {
+    from = prepare(start);
+    to = prepare(end);
+  } catch (error) {
+    if (fallback !== undefined && error[SOFT]) return fallback;
+    throw error;
+  }
+  return formatter.formatRange(from, to);
 }
 
 /**
@@ -164,24 +231,47 @@ function currency(value, currencyCode, locale, options) {
 /** `format.percent(0.256)` -> `26%`. The value is a fraction, not a percentage. */
 function percent(value, locale, options) {
   assertOptions(options);
-  return formatNumber(value, locale, { style: 'percent', ...options });
+  return formatNumber(value, locale, withPreset({ style: 'percent' }, options));
 }
 
 /** `format.compact(1234567)` -> `1.2M`. */
 function compact(value, locale, options) {
   assertOptions(options);
-  return formatNumber(value, locale, { notation: 'compact', ...options });
+  return formatNumber(value, locale, withPreset({ notation: 'compact' }, options));
 }
 
 /** `format.signed(12)` -> `+12`; zero stays `0`. */
 function signed(value, locale, options) {
   assertOptions(options);
-  return formatNumber(value, locale, { signDisplay: 'exceptZero', ...options });
+  return formatNumber(value, locale, withPreset({ signDisplay: 'exceptZero' }, options));
 }
 
-/** `format.bytes(1536)` -> `1.5 kB`. Decimal (1000-based) units from B to PB; the unit label is not localised. */
+/**
+ * Decimals shown for a size in `unit`: one (none for plain bytes) unless the caller chose. Asking for a
+ * minimum above that raises the maximum with it, because Intl rejects a minimum above the maximum.
+ */
+function bytesDigits(unit, options) {
+  const chosen = options.maximumFractionDigits;
+  if (chosen !== undefined) return Number(chosen);
+  const preferred = unit === 0 ? 0 : 1;
+  const minimum = Number(options.minimumFractionDigits);
+  return minimum > preferred ? minimum : preferred;
+}
+
+/**
+ * `format.bytes(1536)` -> `1.5 kB`. Decimal (1000-based) units from B to PB, rounded to one decimal.
+ * Options besides Intl's: `binary: true` for 1024-based `KiB`/`MiB`..., and `unitDisplay: 'long'` for
+ * localized names ("1.5 kilobytes", "1,5 Kilobyte"), which are decimal only. The short labels are not
+ * localized; the number is.
+ */
 function bytes(value, locale, options) {
   const fallback = getFallback(options);
+  const { binary, unitDisplay, ...rest } = options || {};
+  if (unitDisplay !== undefined && unitDisplay !== 'short' && unitDisplay !== 'long') {
+    throw new TypeError('bytes supports unitDisplay "short" or "long"');
+  }
+  const long = unitDisplay === 'long';
+  if (long && binary) throw new TypeError('unitDisplay "long" is not available with binary units');
   let prepared;
   try {
     prepared = prepare(value);
@@ -189,20 +279,30 @@ function bytes(value, locale, options) {
     if (fallback !== undefined && error[SOFT]) return fallback;
     throw error;
   }
+  const base = binary ? 1024 : 1000;
   let scaled = Number(prepared);
   let unit = 0;
-  while (Math.abs(scaled) >= 1000 && unit < BYTE_UNITS.length - 1) {
-    scaled /= 1000;
+  while (Math.abs(scaled) >= base && unit < BYTE_UNITS.length - 1) {
+    scaled /= base;
     unit++;
   }
-  // 999.96 kB rounds to 1000.0 kB: move up a unit instead of printing it.
-  const digits = unit === 0 ? 0 : 1;
-  if (Math.abs(Number(scaled.toFixed(digits))) >= 1000 && unit < BYTE_UNITS.length - 1) {
-    scaled /= 1000;
+  // 999.96 kB rounds to 1000.0 kB: move up a unit instead of printing it. The check uses the number of
+  // decimals that will be shown, so asking for more decimals keeps 999.96 kB as it is.
+  if (Math.abs(Number(scaled.toFixed(bytesDigits(unit, rest)))) >= base && unit < BYTE_UNITS.length - 1) {
+    scaled /= base;
     unit++;
   }
-  const number = formatNumber(scaled, locale, { maximumFractionDigits: unit === 0 ? 0 : 1, ...options });
-  return `${number} ${BYTE_UNITS[unit]}`;
+  const defaults = { maximumFractionDigits: bytesDigits(unit, rest) };
+  if (long) {
+    return formatNumber(scaled, locale, {
+      ...withPreset(defaults, rest),
+      style: 'unit',
+      unit: LONG_BYTE_UNITS[unit],
+      unitDisplay: 'long',
+    });
+  }
+  const number = formatNumber(scaled, locale, withPreset(defaults, rest));
+  return `${number} ${(binary ? BINARY_UNITS : BYTE_UNITS)[unit]}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,18 +351,25 @@ function localeInfo(locale, style, currency) {
     let decimal = '.';
     let group = '';
     let minus = '-';
-    for (const { type, value } of parts) {
+    let minusAt = -1;
+    let lastDigitAt = -1;
+    for (const [index, { type, value }] of parts.entries()) {
       if (type === 'decimal') decimal = value;
       else if (type === 'group') group = value;
-      else if (type === 'minusSign') minus = value.replace(BIDI_MARKS, '');
+      else if (type === 'minusSign') {
+        minus = value.replace(BIDI_MARKS, '');
+        minusAt = index;
+      } else if (type === 'integer' || type === 'fraction') lastDigitAt = index;
     }
+    // Some locales write the minus after the number (Frisian money); only those accept it there.
+    const trailingMinus = minusAt > lastDigitAt;
     // Group sizes come from the plain-number format too: some locales group money differently
     // depending on how it is written (mr-IN: "$१,२३४,५६७" but "१२,३४,५६७ यूएस डॉलर्स").
     const lastSizes = new Set();
     const middleSizes = new Set();
     const plainParts = sample === undefined ? parts : getFormatter(locale, undefined).formatToParts(-123456789012.5);
     for (const source of [parts, plainParts]) {
-      const sizes = source.filter((part) => part.type === 'integer').map((part) => part.value.length);
+      const sizes = source.filter((part) => part.type === 'integer').map((part) => [...part.value].length);
       const last = sizes[sizes.length - 1];
       lastSizes.add(last);
       // India-style grouping (12,34,567) has a different size after the first group. Plain thousands
@@ -277,13 +384,16 @@ function localeInfo(locale, style, currency) {
       digits.set(plain.format(digit), String(digit));
       digits.set(String(digit), String(digit)); // people type ASCII digits in any locale
     }
-    return { decimal, minus, digits, groups: groupAliases(group), lastSizes, middleSizes };
+    return { decimal, minus, trailingMinus, digits, groups: groupAliases(group), lastSizes, middleSizes };
   });
 }
 
 function toAscii(text, info) {
   return [...text].map((ch) => info.digits.get(ch)).join('');
 }
+
+/** One amount for each plural form in common use: Slavic 1/2-4/5+, Welsh 6, Breton 1,000,000, Arabic 100. */
+const CURRENCY_NAME_AMOUNTS = [0, 1, 1.5, 2, 3, 5, 6, 11, 21, 22, 25, 100, 101, 1e6];
 
 /**
  * Currency symbols, codes and names for a currency in a locale, longest first. The English symbols
@@ -293,15 +403,19 @@ function currencyTokens(locale, currency) {
   return memoise(locale, `currency:${currency}`, () => {
     const tokens = new Set([currency]);
     const add = (formatter) => {
-      // Names change with the number ("1 dollar", "2 dollars"; Czech and Arabic have more forms).
-      for (const amount of [0, 1, 1.5, 2, 3, 5, 11, 100]) {
+      // Names change with the number ("1 dollar", "2 dollars"; Czech, Arabic and Welsh have more forms).
+      for (const amount of CURRENCY_NAME_AMOUNTS) {
         for (const part of formatter.formatToParts(amount)) {
           if (part.type === 'currency') tokens.add(part.value.replace(BIDI_MARKS, ''));
         }
       }
     };
     for (const currencyDisplay of ['symbol', 'narrowSymbol', 'code', 'name']) {
+      // Names also depend on the decimals shown: "1,00 dòlars" but "1 dòlar" for a whole amount.
       add(getFormatter(locale, { style: 'currency', currency, currencyDisplay }));
+      add(getFormatter(locale, { style: 'currency', currency, currencyDisplay, minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+      // Currencies without decimals (yen) still take the fractional form when the caller asks for decimals.
+      add(getFormatter(locale, { style: 'currency', currency, currencyDisplay, minimumFractionDigits: 0, maximumFractionDigits: 3 }));
     }
     for (const currencyDisplay of ['symbol', 'narrowSymbol']) {
       add(getFormatter('en', { style: 'currency', currency, currencyDisplay }));
@@ -393,7 +507,9 @@ function checkGrouping(segments, info) {
   }
 }
 
-function parseCore(text, locale, options) {
+/** Validates the configuration and looks up everything that does not depend on the text. */
+function prepareParse(locale, options) {
+  assertOptions(options);
   const { style, currency, notation } = options || {};
   if (style !== undefined && style !== 'decimal' && style !== 'percent' && style !== 'currency') {
     throw new TypeError(`parse does not support style "${style}"`);
@@ -403,7 +519,18 @@ function parseCore(text, locale, options) {
   }
   const resolved = resolveLocale(locale);
   const info = localeInfo(resolved, style, currency);
+  return {
+    info,
+    currencyTokens: style === 'currency' ? currencyTokens(resolved, currency) : null,
+    percentTokens: style === 'percent' ? percentTokens(resolved) : null,
+    compactTokens: notation === 'compact' ? compactTokens(resolved, info) : null,
+    hasFallback: options != null && 'fallback' in options,
+    fallback: options == null ? undefined : options.fallback,
+  };
+}
 
+function parseText(text, plan) {
+  const { info } = plan;
   if (typeof text !== 'string') {
     const error = new TypeError(`Expected a string, got ${text === null ? 'null' : typeof text}`);
     throw text === null || text === undefined ? soft(error) : error;
@@ -423,13 +550,13 @@ function parseCore(text, locale, options) {
   sign = sign || leading;
 
   let exponent = 0;
-  if (style === 'currency') rest = stripAffix(rest, currencyTokens(resolved, currency));
-  if (style === 'percent') {
-    rest = stripAffix(rest, percentTokens(resolved));
+  if (plan.currencyTokens !== null) rest = stripAffix(rest, plan.currencyTokens);
+  if (plan.percentTokens !== null) {
+    rest = stripAffix(rest, plan.percentTokens);
     exponent -= 2;
   }
-  if (notation === 'compact') {
-    for (const [token, power] of compactTokens(resolved, info)) {
+  if (plan.compactTokens !== null) {
+    for (const [token, power] of plan.compactTokens) {
       if (endsWithToken(rest, token)) {
         rest = rest.slice(0, rest.length - token.length).trim();
       } else if (startsWithToken(rest, token)) {
@@ -445,6 +572,13 @@ function parseCore(text, locale, options) {
   }
   // A sign may also follow the currency symbol: "$-5.00".
   if (sign === 0) [rest, sign] = takeSign(rest, info);
+  if (sign === 0 && info.trailingMinus) {
+    const trailing = ['-', '\u2212', info.minus].find((mark) => rest.endsWith(mark));
+    if (trailing !== undefined) {
+      rest = rest.slice(0, rest.length - trailing.length).trim();
+      sign = -1;
+    }
+  }
 
   let integer = '';
   let fraction = '';
@@ -492,13 +626,29 @@ function parseCore(text, locale, options) {
  * @returns {number}
  */
 function parse(text, locale, options) {
-  assertOptions(options);
+  return parseWith(text, prepareParse(locale, options));
+}
+
+function parseWith(text, plan) {
   try {
-    return parseCore(text, locale, options);
+    return parseText(text, plan);
   } catch (error) {
-    if (options != null && 'fallback' in options && error[SOFT]) return options.fallback;
+    if (plan.hasFallback && error[SOFT]) return plan.fallback;
     throw error;
   }
+}
+
+/**
+ * Builds a reusable parser. The locale and options are validated, and the locale data looked up,
+ * once up front, so it suits parsing a whole column of text. Options are read when it is created.
+ *
+ * @param {string | string[] | Intl.Locale} [locale]
+ * @param {Intl.NumberFormatOptions & { fallback?: unknown }} [options] As for `parse`.
+ * @returns {(text: string) => number}
+ */
+function createParser(locale, options) {
+  const plan = prepareParse(locale, options);
+  return (text) => parseWith(text, plan);
 }
 
 module.exports = formatNumber;
@@ -511,3 +661,6 @@ module.exports.compact = compact;
 module.exports.signed = signed;
 module.exports.bytes = bytes;
 module.exports.parse = parse;
+module.exports.createParser = createParser;
+module.exports.formatToParts = formatToParts;
+module.exports.formatRange = formatRange;

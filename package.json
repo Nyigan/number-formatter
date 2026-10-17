@@ -1,7 +1,7 @@
 {
   "name": "@towett/number-formatter",
-  "version": "1.2.0",
-  "description": "Format and parse numbers: thousands separators, currency, percent, compact and bytes. Locale-aware, dependency-free",
+  "version": "1.3.0",
+  "description": "Format and parse numbers: thousands separators, currency, percent, compact, ranges and bytes. Locale-aware, dependency-free",
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {
@@ -19,8 +19,13 @@
   "scripts": {
     "test": "node --test",
     "cover": "c8 --check-coverage --lines 100 --branches 100 --functions 100 node --test",
-    "prepublishOnly": "node scripts/check-placeholders.js && npm test && npm run test:types",
-    "test:types": "tsc -p types-test/tsconfig.json"
+    "prepublishOnly": "node scripts/check-placeholders.js && npm run check:lock && npm test && npm run test:types && npm run check:size",
+    "test:types": "tsc -p types-test/tsconfig.json",
+    "check:lock": "node scripts/check-lock.js",
+    "check:size": "node scripts/check-size.js",
+    "check:speed": "node scripts/check-speed.js",
+    "test:browser:install": "npm install --prefix browser-test && npx --prefix browser-test playwright install --with-deps chromium",
+    "test:browser": "node browser-test/run.js"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest a new function or option
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The real situation matters more than the API you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example input and the output you would want
+      render: js
+  - type: textarea
+    id: intl
+    attributes:
+      label: Can plain Intl.NumberFormat do this already?
+      description: This package stays small and dependency-free, so features that Intl covers directly are unlikely to be added.

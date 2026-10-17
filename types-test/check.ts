@@ -1,4 +1,4 @@
-import format, { formatNumber, createFormatter, currency, percent, compact, signed, bytes, parse } from '../index';
+import format, { formatNumber, createFormatter, currency, percent, compact, signed, bytes, parse, createParser, formatToParts, formatRange } from '../index';
 
 const a: string = format(1);
 const b: string = formatNumber(1n, 'de-DE', { style: 'percent' });
@@ -14,6 +14,24 @@ const j: number = parse('x', undefined, { fallback: NaN });
 const k: number | null = parse(null, 'en-US', { fallback: null });
 const l: number | string = parse('x', 'en-US', { fallback: 'n/a' });
 
+const m: number = createParser('de-DE')('1.234,5');
+const n: number | null = createParser('en-US', { fallback: null })(undefined);
+const o: Intl.NumberFormatPart[] = formatToParts(1234.5, 'en-US');
+const p: Intl.NumberFormatPart[] = formatToParts(null, 'en-US', { fallback: '—' });
+const q: string = formatRange(1, 5, 'en-US', { style: 'currency', currency: 'USD' });
+const r: string = formatRange(null, 5, undefined, { fallback: '—' });
+const s: string[] = [bytes(2048, 'en-US', { binary: true }), bytes(1500, undefined, { unitDisplay: 'long' }), bytes(null, 'en', { fallback: 'n/a' })];
+
+// @ts-expect-error createParser results need a string
+createParser()(5);
+// @ts-expect-error without a fallback the parser rejects undefined
+createParser()(undefined);
+// @ts-expect-error formatRange needs both ends without a fallback
+formatRange(1);
+// @ts-expect-error bytes does not accept narrow
+bytes(1, 'en', { unitDisplay: 'narrow' });
+// @ts-expect-error binary must be a boolean
+bytes(1, 'en', { binary: 'yes' });
 // @ts-expect-error parse needs a string
 parse(5);
 // @ts-expect-error a fallback does not allow other types
@@ -31,4 +49,4 @@ format(1, 'en-US', { fallback: 0 });
 // @ts-expect-error currency code is required
 currency(1);
 
-export { a, b, c, d, e, f, g, h, i, j, k, l };
+export { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s };

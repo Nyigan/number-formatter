@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>number-formatter playground</title>
+<meta name="description" content="Try @towett/number-formatter in your browser: write numbers the way people in each country expect, and read them back.">
+<style>
+  :root {
+    --bg: #edf1f3;
+    --panel: #ffffff;
+    --ink: #13252c;
+    --muted: #51656d;
+    --line: #cdd8dd;
+    --accent: #0b6f78;
+    --accent-ink: #ffffff;
+    --soft: #e2eef0;
+    --err-bg: #fdecea;
+    --err-ink: #8c1d12;
+    --code-bg: #13252c;
+    --code-ink: #e6f0f3;
+    --code-muted: #8fa8b1;
+    --p-integer: #13252c;
+    --p-group: #0e7c86;
+    --p-decimal: #c2255c;
+    --p-fraction: #6d4ac3;
+    --p-currency: #b25e09;
+    --p-sign: #c2331e;
+    --p-compact: #1f7a3d;
+    --p-literal: #51656d;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1a1f;
+      --panel: #152830;
+      --ink: #e8f1f4;
+      --muted: #9db4bc;
+      --line: #2a424b;
+      --accent: #4cc3cd;
+      --accent-ink: #08181c;
+      --soft: #1d3640;
+      --err-bg: #3a1a16;
+      --err-ink: #ffb4a8;
+      --code-bg: #0a1418;
+      --code-ink: #dbe9ed;
+      --code-muted: #7f98a1;
+      --p-integer: #e8f1f4;
+      --p-group: #4cc3cd;
+      --p-decimal: #ff7aa8;
+      --p-fraction: #b39bff;
+      --p-currency: #f0a24b;
+      --p-sign: #ff8a78;
+      --p-compact: #6fd48c;
+      --p-literal: #9db4bc;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 8px; }
+  @media (max-width: 61.99rem) { html { scroll-padding-top: 120px; } }
+  /* Browsers without :has() cannot highlight the chosen option, so show the plain radio buttons instead. */
+  @supports not selector(:has(*)) {
+    .seg input, .styles input { position: static; opacity: 1; margin-right: 8px; }
+  }
+  .notice { margin: 16px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--err-bg); color: var(--err-ink); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
+  main { max-width: 66rem; margin: 0 auto; padding: 24px 16px 64px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .top { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; justify-content: space-between; }
+  .top strong { font-size: 1rem; }
+  .top nav { display: flex; gap: 16px; font-size: 0.95rem; }
+  h1 { margin: 28px 0 8px; font: 400 clamp(1.7rem, 4.5vw, 2.4rem)/1.2 var(--serif); }
+  .lead { margin: 0; max-width: 40rem; color: var(--muted); font-size: 1.05rem; }
+
+  .examples { margin: 20px 0 0; padding: 0; border: 0; }
+  .examples legend { font-size: 0.9rem; font-weight: 600; padding: 0; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font: 0.92rem/1.2 var(--sans); font-weight: 500;
+    padding: 8px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); }
+
+  .layout { margin-top: 24px; display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 62rem) {
+    .layout { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 32px; }
+    .side { position: sticky; top: 16px; }
+  }
+
+  /* On a phone the result stays pinned at the top, so it is visible while you work through the steps. */
+  @media (max-width: 61.99rem) {
+    .side { display: contents; }
+    .result { order: -1; position: sticky; top: 8px; z-index: 5; padding: 10px 16px 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14); }
+    .result h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .result .out { font-size: 1.9rem; }
+    .result .legend { display: none; }
+    .result .error { padding: 10px 12px; font-size: 0.9rem; }
+    .code { order: 1; margin-top: 0; }
+  }
+  form { display: grid; gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+  .seg label { position: relative; padding: 12px 10px; text-align: center; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+  .seg label + label { border-left: 1px solid var(--line); }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
+  .seg label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+  .step { display: grid; gap: 6px; }
+  .step > label, .step > legend { font-weight: 600; }
+  fieldset.step { border: 0; padding: 0; margin: 0; min-width: 0; }
+  fieldset.step legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+  .hint { color: var(--muted); font-size: 0.88rem; margin: 0; }
+
+  input[type="text"], input[type="number"], select {
+    width: 100%; font: 1rem/1.4 var(--sans); padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink);
+  }
+  input.mono { font-family: var(--mono); }
+  .row { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+  .row > div { display: grid; gap: 4px; min-width: 0; align-content: start; }
+  .row label { font-size: 0.9rem; font-weight: 600; }
+
+  .styles { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .styles label {
+    position: relative; display: grid; gap: 2px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer;
+  }
+  .styles label b { font-weight: 600; font-size: 0.95rem; }
+  .styles label span { color: var(--muted); font-size: 0.85rem; }
+  .styles input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .styles label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); background: var(--soft); }
+  .styles label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 0.95rem; }
+  .check input { width: 1.1rem; height: 1.1rem; margin-top: 0.2rem; accent-color: var(--accent); flex: none; }
+
+  details { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  summary { padding: 12px 16px; cursor: pointer; font-weight: 600; }
+  details > div { padding: 0 16px 16px; display: grid; gap: 14px; }
+
+  .result { padding: 22px 22px 18px; }
+  .result h2, .code h2 { margin: 0 0 8px; font: 600 0.9rem/1.3 var(--sans); color: var(--muted); }
+  .out { font: 400 clamp(2.1rem, 7vw, 3.4rem)/1.15 var(--serif); font-variant-numeric: lining-nums tabular-nums; overflow-wrap: anywhere; margin: 0; min-height: 1.15em; }
+  .out span { white-space: pre-wrap; }
+  .p-integer { color: var(--p-integer); }
+  .p-group { color: var(--p-group); }
+  .p-decimal { color: var(--p-decimal); }
+  .p-fraction { color: var(--p-fraction); }
+  .p-currency, .p-percentSign, .p-unit { color: var(--p-currency); }
+  .p-minusSign, .p-plusSign { color: var(--p-sign); }
+  .p-compact { color: var(--p-compact); }
+  .p-literal { color: var(--p-literal); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 0.85rem; color: var(--muted); }
+  .legend li::before { content: ""; display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 6px; background: currentColor; }
+  .legend .p-integer::before { background: var(--p-integer); }
+  .legend .p-group::before { background: var(--p-group); }
+  .legend .p-decimal::before { background: var(--p-decimal); }
+  .legend .p-fraction::before { background: var(--p-fraction); }
+  .legend .p-currency::before, .legend .p-percentSign::before, .legend .p-unit::before { background: var(--p-currency); }
+  .legend .p-minusSign::before, .legend .p-plusSign::before { background: var(--p-sign); }
+  .legend .p-compact::before { background: var(--p-compact); }
+  .legend li { color: var(--muted); }
+  .explain { margin: 0 0 4px; font: 400 1.05rem/1.5 var(--sans); }
+
+  .error { margin: 0; padding: 14px 16px; background: var(--err-bg); color: var(--err-ink); border-radius: 10px; }
+  .error strong { display: block; margin-bottom: 4px; }
+  .error p { margin: 0; }
+  .error code { display: block; margin-top: 8px; font: 0.82rem/1.5 var(--mono); opacity: 0.85; overflow-wrap: anywhere; }
+
+  .code { margin-top: 16px; }
+  .code-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .code-head h2 { margin: 0; }
+  button.copy { font: 600 0.85rem/1 var(--sans); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.copy:hover { border-color: var(--accent); }
+  pre { margin: 0; padding: 16px; background: var(--code-bg); color: var(--code-ink); border-radius: 10px; font: 0.88rem/1.65 var(--mono); overflow-x: auto; }
+  pre .c { color: var(--code-muted); }
+  .space-note { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .support { margin-top: 36px; max-width: 44rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .support h2 { margin: 0 0 6px; font: 600 1rem/1.3 var(--sans); }
+  .support p { margin: 6px 0; }
+  .support ul { margin: 8px 0 0; padding-left: 1.2rem; }
+  .support li { margin: 6px 0; }
+  footer { margin-top: 24px; font-size: 0.9rem; color: var(--muted); max-width: 44rem; }
+  footer p { margin: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <strong>@towett/number-formatter</strong>
+    <nav aria-label="Project links">
+      <a href="https://www.npmjs.com/package/@towett/number-formatter" target="_blank" rel="noopener">npm<span class="sr"> (opens in a new tab)</span></a>
+      <a href="https://github.com/Nyigan/number-formatter" target="_blank" rel="noopener">GitHub<span class="sr"> (opens in a new tab)</span></a>
+      <a href="https://nyigan.github.io/number-formatter/" target="_blank" rel="noopener">Documentation<span class="sr"> (opens in a new tab)</span></a>
+    </nav>
+  </div>
+
+  <noscript><p class="notice">This page needs JavaScript to run the formatter. Nothing is sent anywhere; it all happens in your browser.</p></noscript>
+  <p class="notice" id="loadFailed" hidden>The formatter did not load, so the playground cannot run. Reload the page. If you opened a copy of this file by itself, keep it in the <code>playground</code> folder next to <code>index.js</code> in the project.</p>
+
+  <h1>See how a number should be written for your reader</h1>
+  <p class="lead">The same number is written differently in each country: <b>1,234.50</b> in the US, <b>1.234,50</b> in Germany, <b>12,34,567</b> in India. Type a number, pick a country, and the result and the code update as you go.</p>
+
+  <fieldset class="examples">
+    <legend>Not sure where to start? Try an example</legend>
+    <div class="chips" id="chips"></div>
+  </fieldset>
+
+  <div class="layout">
+    <form id="form" autocomplete="off" onsubmit="return false">
+      <div class="seg" role="radiogroup" aria-label="What do you want to do?">
+        <label><input type="radio" name="direction" value="format"> Write a number</label>
+        <label><input type="radio" name="direction" value="parse"> Read a number from text</label>
+      </div>
+
+      <div class="step">
+        <label for="value" id="l-value">1. Your number</label>
+        <input type="text" class="mono" id="value" inputmode="decimal" spellcheck="false">
+        <p class="hint" id="h-value"></p>
+      </div>
+
+      <div class="step" id="f-to" hidden>
+        <label for="to">Up to</label>
+        <input type="text" class="mono" id="to" inputmode="decimal" spellcheck="false">
+      </div>
+
+      <div class="step">
+        <label for="locale" id="l-locale">2. Who will read it?</label>
+        <select id="locale"></select>
+        <input type="text" id="localeOther" placeholder="A locale code, for example pt-BR" spellcheck="false" aria-label="Locale code" hidden>
+        <p class="hint" id="h-locale">The language and country decide the separators, the symbols and the grouping.</p>
+      </div>
+
+      <fieldset class="step" id="s-style">
+        <legend id="l-style">3. How should it look?</legend>
+        <div class="styles" id="styles">
+          <label><input type="radio" name="mode" value="number"><b>Plain number</b><span>1234.5 becomes 1,234.5</span></label>
+          <label><input type="radio" name="mode" value="currency"><b>Money</b><span>With the currency: $1,234.50</span></label>
+          <label><input type="radio" name="mode" value="percent"><b>Percent</b><span>0.256 becomes 26%</span></label>
+          <label><input type="radio" name="mode" value="compact"><b>Short form</b><span>1,250,000 becomes 1.3M</span></label>
+          <label><input type="radio" name="mode" value="signed"><b>With a + sign</b><span>12 becomes +12</span></label>
+          <label><input type="radio" name="mode" value="bytes"><b>File size</b><span>1536 becomes 1.5 kB</span></label>
+          <label><input type="radio" name="mode" value="range"><b>From – to</b><span>1,000–2,000</span></label>
+        </div>
+      </fieldset>
+
+      <div class="step" id="s-parseStyle" hidden>
+        <label for="parseStyle" id="l-parseStyle">3. What does the text contain?</label>
+        <select id="parseStyle">
+          <option value="decimal">Just a number</option>
+          <option value="currency">An amount of money</option>
+          <option value="percent">A percentage</option>
+          <option value="compact">A short form such as 1.2K or 3 Mio.</option>
+        </select>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="parseNull"><span>If the text is not a number, give <code>null</code> instead of an error</span></label>
+      </div>
+
+      <div class="step" id="s-currency" hidden>
+        <label for="currency">Currency</label>
+        <input type="text" id="currency" list="currencies" maxlength="3" spellcheck="false" placeholder="EUR">
+        <datalist id="currencies">
+          <option value="USD"><option value="EUR"><option value="GBP"><option value="JPY"><option value="CNY"><option value="INR">
+          <option value="KES"><option value="BRL"><option value="CAD"><option value="AUD"><option value="CHF"><option value="MXN">
+        </datalist>
+        <p class="hint">A three-letter code such as USD, EUR or KES. It follows the country you pick until you change it.</p>
+      </div>
+
+      <div class="step" id="s-bytes" hidden>
+        <label class="check"><input type="checkbox" id="binary"><span>Count in 1024s, as operating systems do (KiB, MiB)</span></label>
+        <label class="check"><input type="checkbox" id="longUnit"><span>Write the unit out in full (kilobytes)</span></label>
+      </div>
+
+      <details id="tune">
+        <summary>Fine-tune (optional)</summary>
+        <div>
+          <div class="row" id="s-decimals">
+            <div>
+              <label for="minFrac">Decimals: at least</label>
+              <input type="number" id="minFrac" min="0" max="20" step="1" placeholder="automatic">
+            </div>
+            <div>
+              <label for="maxFrac">Decimals: at most</label>
+              <input type="number" id="maxFrac" min="0" max="20" step="1" placeholder="automatic">
+            </div>
+          </div>
+          <div class="step" id="s-sign">
+            <label for="sign">Plus and minus signs</label>
+            <select id="sign">
+              <option value="">Minus only (the default)</option>
+              <option value="always">Always show a sign</option>
+              <option value="exceptZero">Show a sign, except for zero</option>
+              <option value="never">Never show a sign</option>
+              <option value="auto">Browser default (can show -0)</option>
+            </select>
+          </div>
+          <div class="step" id="s-fallback">
+            <label for="fallback">If the number is missing or invalid, show this instead</label>
+            <input type="text" id="fallback" placeholder="Nothing: report an error">
+            <p class="hint">Useful for empty table cells. Try an empty number above, then type a dash here.</p>
+          </div>
+        </div>
+      </details>
+    </form>
+
+    <aside class="side" aria-label="Result and code">
+      <section class="card result" aria-labelledby="h-result">
+        <h2 id="h-result">Result</h2>
+        <div id="live" aria-live="polite">
+          <p class="out" id="out" dir="auto"></p>
+          <div class="error" id="error" role="alert" hidden></div>
+        </div>
+        <ul class="legend" id="legend" aria-label="Colour key"></ul>
+      </section>
+
+      <section class="code" aria-labelledby="h-code">
+        <div class="code-head">
+          <h2 id="h-code">Use it in your code</h2>
+          <button type="button" class="copy" id="copy">Copy code</button>
+        </div>
+        <pre id="code" tabindex="0" dir="ltr"></pre>
+        <p class="space-note" id="spaceNote" hidden>The gap in this result is a non-breaking space (U+00A0 or U+202F), not an ordinary space. Remember that when you compare strings in tests.</p>
+        <span class="sr" id="copied" role="status"></span>
+      </section>
+    </aside>
+  </div>
+
+  <section class="support" aria-labelledby="h-support">
+    <h2 id="h-support">Support this package (optional)</h2>
+    <p>It is free and MIT-licensed, and it never shows messages or tracks anything. If it saves you time, here are two optional ways to say thanks:</p>
+    <ul>
+      <li><b>Spread the word.</b> A mention in your team chat, a post, or a star on <a href="https://github.com/Nyigan/number-formatter" target="_blank" rel="noopener">GitHub<span class="sr"> (opens in a new tab)</span></a> helps other developers find it.
+        <a href="https://twitter.com/intent/tweet?text=Zero-dependency%20number%20formatting%20for%20Node%20and%20the%20browser%3A%20currency%2C%20compact%2C%20bytes%2C%20locales.&amp;url=https%3A%2F%2Fwww.npmjs.com%2Fpackage%2F%40towett%2Fnumber-formatter" target="_blank" rel="noopener">Share on X<span class="sr"> (opens in a new tab)</span></a>
+        or <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.npmjs.com%2Fpackage%2F%40towett%2Fnumber-formatter" target="_blank" rel="noopener">share on LinkedIn<span class="sr"> (opens in a new tab)</span></a>.</li>
+      <li><b>Shop with me.</b> My <a href="https://www.etsy.com/shop/FrankForgeCo" target="_blank" rel="noopener">Etsy shop<span class="sr"> (opens in a new tab)</span></a> sells editable Canva templates for invitations, flyers and forms. Every sale helps fund the time I spend maintaining this package.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Everything runs in this page. Nothing you type is sent anywhere, and the page sets no cookies.</p>
+    <p>Locale data comes from your browser, so a country can read slightly differently here than in Node. The address bar keeps your choices, so you can share a link to what you see.</p>
+  </footer>
+</main>
+
+<script>var module = { exports: {} };</script>
+<script src="../index.js"></script>
+<script>
+(function () {
+  'use strict';
+  var format = module.exports;
+  var $ = function (id) { return document.getElementById(id); };
+  if (typeof format !== 'function' || typeof format.parse !== 'function') {
+    $('loadFailed').hidden = false;
+    document.querySelector('.layout').hidden = true;
+    $('chips').parentNode.hidden = true;
+    return;
+  }
+
+  var LOCALES = ['en-US', 'en-GB', 'en-IN', 'de-DE', 'de-CH', 'fr-FR', 'fr-CH', 'es-ES', 'es-MX', 'pt-BR', 'it-IT', 'nl-NL',
+    'sv-SE', 'pl-PL', 'ru-RU', 'tr-TR', 'ar-EG', 'he-IL', 'hi-IN', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW', 'th-TH', 'id-ID', 'vi-VN', 'sw-KE'];
+  var REGION_CURRENCY = {
+    US: 'USD', GB: 'GBP', DE: 'EUR', FR: 'EUR', ES: 'EUR', IT: 'EUR', NL: 'EUR', CH: 'CHF', IN: 'INR', JP: 'JPY', KE: 'KES',
+    CN: 'CNY', TW: 'TWD', BR: 'BRL', MX: 'MXN', RU: 'RUB', TR: 'TRY', SE: 'SEK', PL: 'PLN', KR: 'KRW', TH: 'THB', ID: 'IDR',
+    VN: 'VND', EG: 'EGP', IL: 'ILS'
+  };
+  var DEFAULTS = {
+    direction: 'format', mode: 'currency', value: '1234567.891', to: '2000', locale: 'de-DE', currency: 'EUR',
+    parseStyle: 'decimal', minFrac: '', maxFrac: '', sign: '', fallback: '', binary: false, longUnit: false, parseNull: false
+  };
+  var TEXT_FIELDS = ['value', 'to', 'currency', 'parseStyle', 'minFrac', 'maxFrac', 'sign', 'fallback'];
+  var CHECK_FIELDS = ['binary', 'longUnit', 'parseNull'];
+
+  var EXAMPLES = [
+    { id: 'euro', label: 'A price in German', set: { mode: 'currency', value: '1234567.891', locale: 'de-DE', currency: 'EUR' } },
+    { id: 'india', label: 'Indian digit grouping', set: { mode: 'number', value: '1234567.891', locale: 'en-IN' } },
+    { id: 'japan', label: '1.25 million in Japanese', set: { mode: 'compact', value: '1250000', locale: 'ja-JP' } },
+    { id: 'bytes', label: 'A file size', set: { mode: 'bytes', value: '5242880', locale: 'en-US' } },
+    { id: 'zero', label: 'A tiny negative number', set: { mode: 'number', value: '-0.0001', locale: 'en-US' } },
+    { id: 'missing', label: 'A missing value', set: { mode: 'number', value: '', locale: 'en-US', fallback: '—' } },
+    { id: 'read-german', label: 'Read a German price', set: { direction: 'parse', value: '1.234,50 €', locale: 'de-DE', parseStyle: 'currency', currency: 'EUR' } }
+  ];
+
+  // ---- locale list with readable names -------------------------------------------------
+  function localeLabel(tag) {
+    try {
+      var names = new Intl.DisplayNames(['en'], { type: 'language', languageDisplay: 'dialect' });
+      var label = names.of(tag);
+      if (label && label !== tag) return label + ', ' + tag;
+    } catch (e) { /* older engines: fall back to the plain code */ }
+    return tag;
+  }
+  function buildLocaleSelect() {
+    var select = $('locale');
+    LOCALES.forEach(function (tag) {
+      var option = document.createElement('option');
+      option.value = tag;
+      option.textContent = localeLabel(tag);
+      select.appendChild(option);
+    });
+    var other = document.createElement('option');
+    other.value = 'other';
+    other.textContent = 'Another locale (type a code)';
+    select.appendChild(other);
+  }
+  function getLocale() {
+    return $('locale').value === 'other' ? $('localeOther').value.trim() : $('locale').value;
+  }
+  function setLocale(tag) {
+    if (LOCALES.indexOf(tag) !== -1) {
+      $('locale').value = tag;
+      $('localeOther').value = '';
+    } else {
+      $('locale').value = 'other';
+      $('localeOther').value = tag;
+    }
+    $('localeOther').hidden = $('locale').value !== 'other';
+  }
+
+  // ---- state <-> form <-> address bar ---------------------------------------------------
+  function readState() {
+    var s = {
+      direction: document.querySelector('input[name="direction"]:checked').value,
+      mode: document.querySelector('input[name="mode"]:checked').value,
+      locale: getLocale()
+    };
+    TEXT_FIELDS.forEach(function (k) { s[k] = $(k).value; });
+    CHECK_FIELDS.forEach(function (k) { s[k] = $(k).checked; });
+    return s;
+  }
+  function writeState(s) {
+    document.querySelector('input[name="direction"][value="' + s.direction + '"]').checked = true;
+    document.querySelector('input[name="mode"][value="' + s.mode + '"]').checked = true;
+    setLocale(s.locale);
+    TEXT_FIELDS.forEach(function (k) { $(k).value = s[k]; });
+    CHECK_FIELDS.forEach(function (k) { $(k).checked = !!s[k]; });
+    if (s.minFrac !== '' || s.maxFrac !== '' || s.sign !== '' || s.fallback !== '') $('tune').open = true;
+  }
+  function loadFromHash() {
+    var s = Object.assign({}, DEFAULTS);
+    try {
+      var params = new URLSearchParams(location.hash.slice(1));
+      Object.keys(DEFAULTS).forEach(function (k) {
+        if (!params.has(k)) return;
+        s[k] = typeof DEFAULTS[k] === 'boolean' ? params.get(k) === '1' : params.get(k);
+      });
+    } catch (e) { /* a bad hash just means the defaults */ }
+    if (!document.querySelector('input[name="mode"][value="' + s.mode + '"]')) s.mode = DEFAULTS.mode;
+    if (s.direction !== 'parse') s.direction = 'format';
+    return s;
+  }
+  function saveToHash(s) {
+    try {
+      var params = new URLSearchParams();
+      Object.keys(DEFAULTS).forEach(function (k) {
+        if (s[k] !== DEFAULTS[k]) params.set(k, typeof s[k] === 'boolean' ? (s[k] ? '1' : '0') : s[k]);
+      });
+      var hash = params.toString();
+      history.replaceState(null, '', location.pathname + location.search + (hash ? '#' + hash : ''));
+    } catch (e) { /* history can be blocked, for example in a sandboxed frame */ }
+  }
+
+  // ---- building the call ---------------------------------------------------------------
+  function q(text) { return "'" + String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+  function literal(text) {
+    var n = Number(text);
+    if (text.trim() !== '' && isFinite(n) && String(n) === text.trim()) return text.trim();
+    return q(text);
+  }
+  function show(v) {
+    if (v === null || typeof v === 'boolean' || typeof v === 'number') return String(v);
+    return q(v);
+  }
+  function objectLiteral(o) {
+    var keys = Object.keys(o);
+    return keys.length ? '{ ' + keys.map(function (k) { return k + ': ' + show(o[k]); }).join(', ') + ' }' : '';
+  }
+
+  function plan(s) {
+    var locale = s.locale || 'en-US';
+    var cur = s.currency.trim().toUpperCase();
+    var value = s.value;
+    var o = {};
+    var call, fn, args, partsOptions = null;
+
+    if (s.direction === 'parse') {
+      if (s.parseStyle === 'currency') { o.style = 'currency'; o.currency = cur; }
+      if (s.parseStyle === 'percent') o.style = 'percent';
+      if (s.parseStyle === 'compact') o.notation = 'compact';
+      if (s.parseNull) o.fallback = null;
+      fn = '.parse';
+      args = [q(value), q(locale)];
+      call = function () { return format.parse(value, locale, o); };
+    } else {
+      var tunable = s.mode !== 'bytes';
+      if (tunable && s.minFrac !== '') o.minimumFractionDigits = Number(s.minFrac);
+      if (tunable && s.maxFrac !== '') o.maximumFractionDigits = Number(s.maxFrac);
+      if (tunable && s.sign) o.signDisplay = s.sign;
+      if (s.fallback !== '') o.fallback = s.fallback;
+      if (s.mode === 'bytes') {
+        if (s.binary) o.binary = true;
+        if (s.longUnit) o.unitDisplay = 'long';
+      }
+      switch (s.mode) {
+        case 'number': fn = ''; args = [literal(value), q(locale)]; call = function () { return format(value, locale, o); }; partsOptions = {}; break;
+        case 'currency': fn = '.currency'; args = [literal(value), q(cur), q(locale)]; call = function () { return format.currency(value, cur, locale, o); }; partsOptions = { style: 'currency', currency: cur }; break;
+        case 'percent': fn = '.percent'; args = [literal(value), q(locale)]; call = function () { return format.percent(value, locale, o); }; partsOptions = { style: 'percent' }; break;
+        case 'compact': fn = '.compact'; args = [literal(value), q(locale)]; call = function () { return format.compact(value, locale, o); }; partsOptions = { notation: 'compact' }; break;
+        case 'signed': fn = '.signed'; args = [literal(value), q(locale)]; call = function () { return format.signed(value, locale, o); }; partsOptions = { signDisplay: 'always' }; break;
+        case 'bytes': fn = '.bytes'; args = [literal(value), q(locale)]; call = function () { return format.bytes(value, locale, o); }; break;
+        case 'range': fn = '.formatRange'; args = [literal(value), literal(s.to), q(locale)]; call = function () { return format.formatRange(value, s.to, locale, o); }; break;
+      }
+      if (partsOptions) Object.keys(o).forEach(function (k) { if (k !== 'fallback') partsOptions[k] = o[k]; });
+    }
+    var optText = objectLiteral(o);
+    if (optText) args.push(optText);
+    return { call: call, text: 'format' + fn + '(' + args.join(', ') + ');', partsOptions: partsOptions, locale: locale, value: value };
+  }
+
+  // ---- plain-language errors -----------------------------------------------------------
+  function explain(e, s) {
+    var m = e.message || '';
+    if (e instanceof RangeError && /language tag|locale/i.test(m)) {
+      return '“' + (s.locale || '') + '” is not a locale code Intl understands. Pick a country from the list, or type a code such as en-US or pt-BR.';
+    }
+    var usesCurrency = s.direction === 'parse' ? s.parseStyle === 'currency' : s.mode === 'currency';
+    if (usesCurrency && !/^[A-Za-z]{3}$/.test(s.currency.trim())) return 'Enter a three-letter currency code, such as USD, EUR or KES.';
+    if (e instanceof RangeError && /currency/i.test(m)) return 'Use a three-letter currency code, such as USD, EUR or KES.';
+    if (e instanceof RangeError && /FractionDigits/.test(m)) {
+      var lo = s.minFrac === '' ? null : Number(s.minFrac);
+      var hi = s.maxFrac === '' ? null : Number(s.maxFrac);
+      if (lo !== null && hi !== null && lo > hi) return '“Decimals: at least” cannot be larger than “Decimals: at most”. Change one of them under Fine-tune.';
+      return 'Decimals must be a whole number from 0 to 20. Change the values under Fine-tune.';
+    }
+    if (e instanceof TypeError && /binary units/.test(m)) return 'Names written out in full are not available with 1024-based units. Untick one of the two options.';
+    if (s.direction === 'parse') {
+      return 'This text cannot be read as one number in this locale. Check that its separators match the country you picked, and that the choice in step 3 fits the text.';
+    }
+    if (e instanceof RangeError) return 'That is not a finite number. Try a normal number such as 1234.5.';
+    if (s.value.trim() === '') return 'Type a number to format. To show a dash or a note for empty values instead, set it under Fine-tune.';
+    return '“' + s.value + '” is not a number. Remove the letters, or set a placeholder under Fine-tune to show instead of an error.';
+  }
+
+  var LEGEND_NAMES = {
+    integer: 'digits', group: 'group separator', decimal: 'decimal mark', fraction: 'decimals',
+    currency: 'currency', percentSign: 'percent sign', minusSign: 'minus', plusSign: 'plus', compact: 'short-form word', unit: 'unit'
+  };
+
+  function showResult(text, parts) {
+    var out = $('out');
+    var legend = $('legend');
+    out.textContent = '';
+    legend.textContent = '';
+    if (!parts) { out.textContent = text; return; }
+    var seen = {};
+    parts.forEach(function (p) {
+      var span = document.createElement('span');
+      span.className = 'p-' + p.type;
+      span.textContent = p.value;
+      out.appendChild(span);
+      seen[p.type] = true;
+    });
+    Object.keys(seen).forEach(function (type) {
+      if (!LEGEND_NAMES[type]) return;
+      var li = document.createElement('li');
+      li.className = 'p-' + type;
+      li.textContent = LEGEND_NAMES[type];
+      legend.appendChild(li);
+    });
+  }
+
+  function showError(e, s) {
+    var box = $('error');
+    box.textContent = '';
+    var title = document.createElement('strong');
+    title.textContent = s.direction === 'parse' ? 'This text cannot be read' : 'This cannot be written yet';
+    var body = document.createElement('p');
+    body.textContent = explain(e, s);
+    var detail = document.createElement('code');
+    detail.textContent = e.name + ': ' + e.message;
+    box.appendChild(title);
+    box.appendChild(body);
+    box.appendChild(detail);
+    box.hidden = false;
+    $('out').hidden = true;
+    $('legend').textContent = '';
+  }
+
+  var lastCode = '';
+  function render() {
+    var s = readState();
+    updateVisibility(s);
+    saveToHash(s);
+    var p = plan(s);
+    var resultText;
+    var failed = false;
+    try {
+      var result = p.call();
+      var text = s.direction === 'parse' ? String(result) : result;
+      resultText = s.direction === 'parse' ? text : q(result);
+      var parts = null;
+      if (p.partsOptions) {
+        try {
+          var candidate = format.formatToParts(p.value, p.locale, p.partsOptions);
+          if (candidate.map(function (x) { return x.value; }).join('') === text) parts = candidate;
+        } catch (e) { parts = null; }
+      }
+      $('error').hidden = true;
+      $('error').textContent = '';
+      $('out').hidden = false;
+      showResult(text, parts);
+      $('spaceNote').hidden = !/[  ]/.test(text);
+    } catch (e) {
+      failed = true;
+      showError(e, s);
+      resultText = e.name + ': ' + e.message;
+      $('spaceNote').hidden = true;
+    }
+    var code = '// npm install @towett/number-formatter\nconst format = require(\'@towett/number-formatter\');\n\n' +
+      p.text + '\n// ' + (failed ? 'throws ' : '→ ') + resultText;
+    lastCode = code;
+    var pre = $('code');
+    pre.textContent = '';
+    code.split('\n').forEach(function (line, i, all) {
+      var span = document.createElement('span');
+      if (line.indexOf('//') === 0) span.className = 'c';
+      span.textContent = line + (i < all.length - 1 ? '\n' : '');
+      pre.appendChild(span);
+    });
+  }
+
+  // ---- showing only what applies ---------------------------------------------------------
+  function updateVisibility(s) {
+    var parse = s.direction === 'parse';
+    $('s-style').hidden = parse;
+    $('s-parseStyle').hidden = !parse;
+    $('f-to').hidden = parse || s.mode !== 'range';
+    var money = (!parse && s.mode === 'currency') || (parse && s.parseStyle === 'currency');
+    $('s-currency').hidden = !money;
+    $('s-bytes').hidden = parse || s.mode !== 'bytes';
+    $('s-decimals').hidden = parse || s.mode === 'bytes';
+    $('s-sign').hidden = parse || s.mode === 'bytes';
+    $('s-fallback').hidden = parse;
+    $('tune').hidden = parse;
+    $('l-value').textContent = parse ? '1. The text to read' : (s.mode === 'bytes' ? '1. A size in bytes' : (s.mode === 'range' ? '1. Start of the range' : '1. Your number'));
+    $('l-locale').textContent = parse ? '2. Which country is the text written for?' : '2. Who will read it?';
+    $('h-locale').textContent = parse
+      ? 'The separators depend on this: in Germany 1.234,5 means one thousand two hundred and thirty-four and a half.'
+      : 'The language and country decide the separators, the symbols and the grouping.';
+    $('h-value').textContent = parse
+      ? 'Paste or type text as a person would write it, such as 1.234,50 € or 25 %.'
+      : (s.mode === 'bytes' ? 'For example 1536 or 5242880.' : 'Digits only, with a dot for decimals. Very long numbers are fine.');
+    var chips = document.querySelectorAll('#chips .chip');
+    for (var i = 0; i < chips.length; i++) chips[i].setAttribute('aria-pressed', 'false');
+  }
+
+  // ---- events --------------------------------------------------------------------------
+  var currencyTouched = false;
+
+  function onInput(event) {
+    var t = event && event.target;
+    if (t && t.id === 'currency') currencyTouched = true;
+    if (t && t.id === 'locale') $('localeOther').hidden = $('locale').value !== 'other';
+    if (t && (t.id === 'locale' || t.id === 'localeOther') && !currencyTouched) {
+      var region = (getLocale().split('-').pop() || '').toUpperCase();
+      if (REGION_CURRENCY[region]) $('currency').value = REGION_CURRENCY[region];
+    }
+    if (t && t.name === 'direction') {
+      var s = readState();
+      // Offer a sensible starting text when switching direction, but never replace what someone typed.
+      var untouched = /^[\d.\-]*$/.test($('value').value) || $('value').dataset.example === '1';
+      if (untouched) {
+        $('value').value = s.direction === 'parse' ? parseExample(s) : DEFAULTS.value;
+        $('value').dataset.example = '1';
+      }
+    }
+    if (t && t.id === 'value') delete $('value').dataset.example;
+    if (t && t.id !== 'value' && t.name !== 'direction' && $('value').dataset.example === '1') {
+      var cur = readState();
+      if (cur.direction === 'parse') $('value').value = parseExample(cur);
+    }
+    render();
+  }
+
+  function parseExample(s) {
+    var locale = s.locale || 'en-US';
+    var cur = s.currency.trim().toUpperCase() || 'EUR';
+    try {
+      if (s.parseStyle === 'currency') return format.currency(1234.5, cur, locale);
+      if (s.parseStyle === 'percent') return format.percent(0.256, locale, { maximumFractionDigits: 1 });
+      if (s.parseStyle === 'compact') return format.compact(1200000, locale);
+      return format(1234.56, locale);
+    } catch (e) { return '1,234.56'; }
+  }
+
+  function buildChips() {
+    var box = $('chips');
+    EXAMPLES.forEach(function (ex) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = ex.label;
+      b.setAttribute('data-example', ex.id);
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        var s = Object.assign({}, DEFAULTS, ex.set);
+        currencyTouched = false; // an example is not a choice the person made, so the currency still follows the country
+        $('tune').open = false;
+        writeState(s);
+        $('value').dataset.example = '1'; // the text came from an example, so it may be replaced when the settings change
+        render();
+        b.setAttribute('aria-pressed', 'true');
+      });
+      box.appendChild(b);
+    });
+  }
+
+  $('form').addEventListener('input', onInput);
+  $('form').addEventListener('change', onInput);
+
+  $('copy').addEventListener('click', function () {
+    var done = function (ok) {
+      $('copied').textContent = ok ? 'Copied' : 'Copy failed. Select the code and copy it by hand.';
+      $('copy').textContent = ok ? 'Copied' : 'Copy code';
+      setTimeout(function () { $('copy').textContent = 'Copy code'; }, 1500);
+    };
+    var fallbackCopy = function () {
+      // For pages without the clipboard API (some local or non-secure addresses): select the code and copy it.
+      try {
+        var range = document.createRange();
+        range.selectNodeContents($('code'));
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        var ok = document.execCommand('copy');
+        sel.removeAllRanges();
+        done(ok);
+      } catch (e) { done(false); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(lastCode).then(function () { done(true); }, fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  });
+
+  window.addEventListener('hashchange', function () { writeState(loadFromHash()); render(); });
+
+  buildLocaleSelect();
+  buildChips();
+  var initial = loadFromHash();
+  currencyTouched = initial.currency !== DEFAULTS.currency;
+  writeState(initial);
+  render();
+})();
+</script>
+</body>
+</html>

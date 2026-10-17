@@ -16,9 +16,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm install
+      - run: npm ci
       - run: npm test
+      - if: matrix.node == 22
+        run: npm run check:lock
       - if: matrix.node == 22
         run: npm run test:types
       - if: matrix.node == 22
         run: npm run cover
+      - if: matrix.node == 22
+        run: npm run check:size
+      - if: matrix.node == 22
+        run: npm run check:speed
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run test:browser:install
+      - run: npm run test:browser

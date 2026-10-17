@@ -43,8 +43,43 @@ declare namespace formatNumber {
   ): number | T;
   function parse(text: string, locale?: Locale, options?: Intl.NumberFormatOptions | null): number;
 
-  /** `bytes(1536)` -> `1.5 kB`. Decimal units, B to PB; the unit label is not localised. */
-  function bytes(value: Value, locale?: Locale, options?: Options | null): string;
+  /**
+   * Builds a reusable parser. Locale and options are validated and looked up once, up front, and read
+   * when it is created.
+   */
+  function createParser<T>(
+    locale: Locale | undefined,
+    options: Intl.NumberFormatOptions & { fallback: T }
+  ): (text: string | null | undefined) => number | T;
+  function createParser(locale?: Locale, options?: Intl.NumberFormatOptions | null): (text: string) => number;
+
+  /** The pieces of the formatted number, for styling them separately. A `fallback` gives one `literal` part. */
+  function formatToParts(
+    value: Value | null | undefined,
+    locale: Locale | undefined,
+    options: OptionsWithFallback
+  ): Intl.NumberFormatPart[];
+  function formatToParts(value: Value, locale?: Locale, options?: Options | null): Intl.NumberFormatPart[];
+
+  /** `formatRange(1000, 2000)` -> `1,000–2,000`. Equal ends give `~1,000`. */
+  function formatRange(
+    start: Value | null | undefined,
+    end: Value | null | undefined,
+    locale: Locale | undefined,
+    options: OptionsWithFallback
+  ): string;
+  function formatRange(start: Value, end: Value, locale?: Locale, options?: Options | null): string;
+
+  interface BytesOptions extends Options {
+    /** 1024-based units labelled `KiB`, `MiB`... instead of 1000-based `kB`, `MB`... */
+    binary?: boolean;
+    /** `'long'` gives localized names ("1.5 kilobytes"); decimal units only. */
+    unitDisplay?: 'short' | 'long';
+  }
+
+  /** `bytes(1536)` -> `1.5 kB`; `bytes(1536, 'en', { binary: true })` -> `1.5 KiB`. Decimal units, B to PB; the unit label is not localised. */
+  function bytes(value: Value | null | undefined, locale: Locale | undefined, options: BytesOptions & { fallback: string }): string;
+  function bytes(value: Value, locale?: Locale, options?: BytesOptions | null): string;
 
   export {
     formatNumber as default,
@@ -62,6 +97,10 @@ declare namespace formatNumber {
     signed,
     bytes,
     parse,
+    createParser,
+    formatToParts,
+    formatRange,
+    BytesOptions,
   };
 }
 

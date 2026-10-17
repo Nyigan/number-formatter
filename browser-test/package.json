@@ -1,0 +1,11 @@
+{
+  "name": "number-formatter-browser-test",
+  "private": true,
+  "description": "Runs index.js in Chromium. Separate from the main package so users and the main test run never install a browser.",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.0"
+  }
+}
