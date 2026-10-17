@@ -1,45 +1,59 @@
 {
-    "name": "@towett/number-formatter",
-    "version": "0.1.12",
-    "description": "Simple nodejs number formatter",
-    "main": "index.js",
-    "scripts": {
-        "test": "node_modules/.bin/mocha --reporter spec",
-        "cover": "node_modules/istanbul/lib/cli.js cover node_modules/mocha/bin/_mocha -- -R spec test/*"
+  "name": "@towett/number-formatter",
+  "version": "1.1.0",
+  "description": "Format numbers with thousands separators, locale-aware and dependency-free",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
     },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Nyigan/number-formatter.git"
-    },
-    "engines": {
-        "node": ">=4.2.4"
-    },
-    "keywords": [
-        "simple",
-        "number",
-        "formatter",
-        "comma separated numbers"
-    ],
-    "author": "Franklin Towett <http://towett.com> (http://towett.com)",
-    "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/Nyigan/number-formatter/issues"
-    },
-    "homepage": "https://github.com/Nyigan/number-formatter#readme",
-    "devDependencies": {
-        "chai": "^4.3.4",
-        "coveralls": "^3.1.1",
-        "istanbul": "^0.4.5",
-        "mocha": "^9.1.2"
-    },
-    "dependencies": {
-        "boom": "^7.3.0",
-        "browser-stdout": "^1.3.1",
-        "glob-parent": "^6.0.2",
-        "handlebars": "^4.7.7",
-        "hoek": "^6.1.3",
-        "minimist": "^1.2.5",
-        "tough-cookie": "^4.1.3",
-        "y18n": "^5.0.8"
-    }
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "node --test",
+    "cover": "c8 --check-coverage --lines 100 --branches 100 --functions 100 node --test",
+    "prepublishOnly": "node scripts/check-placeholders.js && npm test && npm run test:types",
+    "test:types": "tsc -p types-test/tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nyigan/number-formatter.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "number",
+    "format",
+    "formatter",
+    "thousands",
+    "separator",
+    "comma",
+    "locale",
+    "intl"
+  ],
+  "author": "Franklin Towett <http://towett.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Nyigan/number-formatter/issues"
+  },
+  "homepage": "https://github.com/Nyigan/number-formatter#readme",
+  "funding": {
+    "type": "individual",
+    "url": "https://www.etsy.com/shop/FrankForgeCo"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "c8": "^12.0.0",
+    "typescript": "^5.6.0"
+  }
 }
