@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+- `parse(text, [locale], [options])`: the inverse of `format`. Reads each locale's separators and digits, signs and accounting parentheses, and with the matching `options` also currency symbols, codes and names, percent signs and compact words (`1.2K`, `3,5 Mio.`, `200万`). Ambiguous or malformed text throws a `TypeError` instead of returning a wrong number; `fallback` returns any value you choose instead. `parse(format(x, l, o), l, o)` returns `x`, tested across 50 locales.
+
 ## 1.1.0
 
 ### Added

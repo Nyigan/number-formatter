@@ -30,6 +30,19 @@ declare namespace formatNumber {
   function compact(value: Value, locale?: Locale, options?: Options | null): string;
   /** `signed(12)` -> `+12`. */
   function signed(value: Value, locale?: Locale, options?: Options | null): string;
+  /**
+   * Parses localized text such as `'1.234,5'` (de-DE), `'$1,234.50'` or `'1.2K'` into a number.
+   * Pass the options you used to format the text: `style: 'percent'`, `style: 'currency'` with
+   * `currency`, and `notation: 'compact'` are understood. Throws a `TypeError` for text that is not
+   * a number; with `fallback`, returns that value instead (any type, including `NaN` or `null`).
+   */
+  function parse<T>(
+    text: string | null | undefined,
+    locale: Locale | undefined,
+    options: Intl.NumberFormatOptions & { fallback: T }
+  ): number | T;
+  function parse(text: string, locale?: Locale, options?: Intl.NumberFormatOptions | null): number;
+
   /** `bytes(1536)` -> `1.5 kB`. Decimal units, B to PB; the unit label is not localised. */
   function bytes(value: Value, locale?: Locale, options?: Options | null): string;
 
@@ -48,6 +61,7 @@ declare namespace formatNumber {
     compact,
     signed,
     bytes,
+    parse,
   };
 }
 

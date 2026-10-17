@@ -3,7 +3,7 @@
 [![CI](https://github.com/Nyigan/number-formatter/actions/workflows/ci.yml/badge.svg)](https://github.com/Nyigan/number-formatter/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@towett/number-formatter)](https://www.npmjs.com/package/@towett/number-formatter)
 
-Format numbers for people: thousands separators, currency, percentages, compact (`1.2K`) and file sizes. Locale-aware, zero dependencies, ships TypeScript types. Node 22+, and it works unchanged in browsers.
+Format numbers for people, and read them back: thousands separators, currency, percentages, compact (`1.2K`) and file sizes. Locale-aware, zero dependencies, ships TypeScript types. Node 22+, and it works unchanged in browsers.
 
 ## Install
 
@@ -36,12 +36,20 @@ format(null, 'en-US', { fallback: '—' });   // '—'
 // A formatter with everything fixed, for lists and loops.
 const euros = format.createFormatter('de-DE', { style: 'currency', currency: 'EUR' });
 euros(1234.5);                      // '1.234,50 €'
+
+// And back again: text people type or paste, read in their locale.
+format.parse('1.234.567,891', 'de-DE');   // 1234567.891
+format.parse('1,234.50');                 // 1234.5
+format.parse('$1,234.50', 'en-US', { style: 'currency', currency: 'USD' }); // 1234.5
+format.parse('25.6%', 'en-US', { style: 'percent' });                        // 0.256
+format.parse('1.2K', 'en-US', { notation: 'compact' });                      // 1200
+format.parse('abc', 'en-US', { fallback: NaN });                             // NaN
 ```
 
 TypeScript and ESM imports:
 
 ```ts
-import format, { createFormatter, currency } from '@towett/number-formatter';
+import format, { createFormatter, currency, parse } from '@towett/number-formatter';
 ```
 
 ## API
@@ -74,6 +82,36 @@ All take `(value, [locale], [options])`, except `currency`, which takes the curr
 
 `bytes` uses decimal units (1 kB = 1000 B) from `B` to `PB`, rounds to one decimal and moves up a unit instead of printing `1000 kB`. The unit labels are not localised; the number is.
 
+### `format.parse(text, [locale], [options])`
+
+Turns localized text into a number: the inverse of `format`. `Number('1,234.5')` is `NaN` and `parseFloat('1.234,5')` is `1.234`; `parse` reads each locale's own separators and digits.
+
+| Argument | Notes |
+|---|---|
+| `text` | A string such as `'1.234,5'`, `'(1,234.50)'`, `'-5'`, `'١٬٢٣٤'`. |
+| `locale` | Same as `format`. **This decides what `1,234` means**: 1234 in `en-US`, 1.234 in `de-DE`. |
+| `options` | The options you used to format the text. `style: 'percent'`, `style: 'currency'` with `currency`, and `notation: 'compact'` are understood. Other formatting options are ignored. `style: 'unit'` is not supported. |
+
+What it accepts:
+
+- **Group and decimal separators of the locale**, with the locale's digits or ASCII digits. Spaces and apostrophes are interchangeable as group separators (Swiss and French writers mix them).
+- **Signs:** `-`, `−`, `+`, and accounting parentheses `(1,234.50)` for negatives.
+- **Currency symbols, codes and names** when you pass `style: 'currency'`. They are optional, and the English symbols (`¥`, `€`, `$`) are always accepted.
+- **Percent signs** with `style: 'percent'`. The result is a fraction: `'26%'` gives `0.26`, and so does `'26'`.
+- **Compact words** with `notation: 'compact'`: `1.2K`, `3,5 Mio.`, `200万`, `2 million`, case-insensitively.
+
+What it rejects, with a `TypeError` that says what is wrong but never repeats your text: empty text, stray characters, two decimal separators, and group separators in the wrong place (`'1,23'` in `en-US`). This is deliberate. A user in Germany typing `1,5` into an `en-US` field gets an error and not a silent `15`.
+
+Pass `fallback` to get a value instead of an exception for text that is not a number. Unlike `format`, the fallback can be any value: `NaN`, `null`, `0`, a string.
+
+```js
+format.parse('1,23');                              // throws TypeError
+format.parse('1,23', 'en-US', { fallback: null }); // null
+format.parse('1234.5', 'de-DE');                   // throws: '.' is a group separator there
+```
+
+`parse(format(x, locale, options), locale, options)` returns `x` for the supported options. This is tested across 50 locales, including currencies in every display style, percent and compact notation.
+
 ### `fallback`
 
 With `fallback` set, the call returns that string instead of throwing when the value is `null`, `undefined`, `NaN`, an infinity or a non-numeric string (`''`, `'N/A'`). Genuine mistakes, such as passing an object or a boolean, still throw.
@@ -84,6 +122,8 @@ With `fallback` set, the call returns that string instead of throwing when the v
 - **Decimals are rounded to 3 places** unless you set `maximumFractionDigits`.
 - **`-0` and `'-0'` format as `0`.** A small negative that rounds to zero (`-0.0001`) still prints `-0`; use `maximumFractionDigits` or `signDisplay: 'negative'` if that matters.
 - **Numbers above `Number.MAX_SAFE_INTEGER` lose precision** in JavaScript itself. Pass a `bigint` or a numeric string to keep every digit.
+- **`parse` follows the locale data of the Node version or browser it runs in.** Locale data is updated between releases (for example, Swiss-French money moved from a narrow space to `'` in newer versions), so text that you store and parse later should be parsed with the same options, or normalised first.
+- **`parse` returns a JavaScript number**, so more than about 15 significant digits lose precision. Compact words and percents are applied exactly: `'25.6%'` is exactly `0.256`.
 - **Formatters are cached** per locale and options, so repeated calls are cheap. With options set, 300,000 calls took about 0.4 s against about 13 s for plain `toLocaleString`. Without options, V8 already caches, so there is no difference.
 
 ### Errors
@@ -95,6 +135,9 @@ With `fallback` set, the call returns that string instead of throwing when the v
 | `value` is `NaN` or infinite, including `'1e999'` | `RangeError` (unless `fallback` is set) |
 | `options` is not an object, `fallback` is not a string, `locale` has the wrong type | `TypeError` |
 | Invalid locale or option value | `RangeError` (from `Intl`) |
+| `parse`: `text` is not a string | `TypeError` (`null` and `undefined` count as missing text, which `fallback` covers) |
+| `parse`: text is empty or not a number | `TypeError` (unless `fallback` is set) |
+| `parse`: more digits than a number can hold | `RangeError` (unless `fallback` is set) |
 
 ## Development
 
