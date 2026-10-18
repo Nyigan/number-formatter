@@ -1,6 +1,6 @@
 {
   "name": "@towett/number-formatter",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Format and parse numbers: thousands separators, currency, percent, compact, ranges and bytes. Locale-aware, dependency-free",
   "main": "index.js",
   "types": "index.d.ts",

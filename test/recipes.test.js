@@ -50,6 +50,7 @@ test('styling the decimals', () => {
 
 test('file sizes and ranges', () => {
   assert.equal(format.bytes(5242880), '5.2 MB');
+  assert.equal(format.parseBytes('5.2 MB'), 5200000);
   // Long unit names come from the locale data of the running Node version, so compare with Intl.
   const long = format.bytes(1536, 'de-DE', { unitDisplay: 'long' });
   const expected = new Intl.NumberFormat('de-DE', { style: 'unit', unit: 'kilobyte', unitDisplay: 'long', maximumFractionDigits: 1 }).format(1.5);
@@ -69,4 +70,24 @@ test("the user's own locale", () => {
   assert.equal(format(1234.5, safeLocale('de-de')), '1.234,5');
   assert.equal(format(1234.5, safeLocale('not a locale!!')), '1,234.5');
   assert.throws(() => format(1234.5, 'not a locale!!'), RangeError);
+});
+
+test('reading file sizes (README, parseBytes)', () => {
+  assert.equal(format.parseBytes('1.5 MB'), 1500000);
+  assert.equal(format.parseBytes('1,5 MiB', 'de-DE'), 1572864);
+  assert.equal(format.parseBytes('1.5 MB', 'en-US', { binary: true }), 1572864);
+  assert.equal(format.parseBytes('1.5 MiB'), 1572864);
+  assert.equal(format.parseBytes('1,5 Kilobyte', 'de-DE'), 1500);
+  assert.throws(() => format.parseBytes('5 Mb'), TypeError);
+  assert.equal(format.parseBytes('lots', 'en-US', { fallback: null }), null);
+  assert.equal(format.parseBytes('1.1 kB'), 1100);
+  assert.equal(format.parseBytes('0.5 B'), 0.5);
+  assert.equal(format.parseBytes(format.bytes(1536)), 1500);
+  assert.equal(format.parseBytes(format.bytes(2048, 'de-DE', { binary: true }), 'de-DE'), 2048);
+  assert.equal(format.parseBytes('1,5 ko', 'fr'), 1500);
+  assert.equal(format.parseBytes('1.5 mb'), 1500000);
+  assert.throws(() => format.parseBytes('9'.repeat(400) + ' PB'), RangeError);
+  const jaKilo = new Intl.NumberFormat('ja-JP', { style: 'unit', unit: 'kilobyte', unitDisplay: 'long' }).format(2);
+  assert.equal(format.parseBytes(jaKilo, 'ja-JP'), 2000);
+  assert.match(jaKilo, /キロバイト/);
 });

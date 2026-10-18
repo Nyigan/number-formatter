@@ -260,8 +260,13 @@
           <option value="currency">An amount of money</option>
           <option value="percent">A percentage</option>
           <option value="compact">A short form such as 1.2K or 3 Mio.</option>
+          <option value="bytes">A file size such as 1.5 MB or 3 GiB</option>
         </select>
         <label class="check" style="margin-top:6px"><input type="checkbox" id="parseNull"><span>If the text is not a number, give <code>null</code> instead of an error</span></label>
+      </div>
+
+      <div class="step" id="s-readbytes" hidden>
+        <label class="check"><input type="checkbox" id="binaryRead"><span>Count KB and MB in 1024s, as operating systems do (KiB and MiB always are)</span></label>
       </div>
 
       <div class="step" id="s-currency" hidden>
@@ -373,10 +378,10 @@
   };
   var DEFAULTS = {
     direction: 'format', mode: 'currency', value: '1234567.891', to: '2000', locale: 'de-DE', currency: 'EUR',
-    parseStyle: 'decimal', minFrac: '', maxFrac: '', sign: '', fallback: '', binary: false, longUnit: false, parseNull: false
+    parseStyle: 'decimal', minFrac: '', maxFrac: '', sign: '', fallback: '', binary: false, longUnit: false, parseNull: false, binaryRead: false
   };
   var TEXT_FIELDS = ['value', 'to', 'currency', 'parseStyle', 'minFrac', 'maxFrac', 'sign', 'fallback'];
-  var CHECK_FIELDS = ['binary', 'longUnit', 'parseNull'];
+  var CHECK_FIELDS = ['binary', 'longUnit', 'parseNull', 'binaryRead'];
 
   var EXAMPLES = [
     { id: 'euro', label: 'A price in German', set: { mode: 'currency', value: '1234567.891', locale: 'de-DE', currency: 'EUR' } },
@@ -385,6 +390,7 @@
     { id: 'bytes', label: 'A file size', set: { mode: 'bytes', value: '5242880', locale: 'en-US' } },
     { id: 'zero', label: 'A tiny negative number', set: { mode: 'number', value: '-0.0001', locale: 'en-US' } },
     { id: 'missing', label: 'A missing value', set: { mode: 'number', value: '', locale: 'en-US', fallback: '—' } },
+    { id: 'read-size', label: 'Read a file size', set: { direction: 'parse', value: '1.5 MB', locale: 'en-US', parseStyle: 'bytes' } },
     { id: 'read-german', label: 'Read a German price', set: { direction: 'parse', value: '1.234,50 €', locale: 'de-DE', parseStyle: 'currency', currency: 'EUR' } }
   ];
 
@@ -494,10 +500,16 @@
       if (s.parseStyle === 'currency') { o.style = 'currency'; o.currency = cur; }
       if (s.parseStyle === 'percent') o.style = 'percent';
       if (s.parseStyle === 'compact') o.notation = 'compact';
+      if (s.parseStyle === 'bytes' && s.binaryRead) o.binary = true;
       if (s.parseNull) o.fallback = null;
-      fn = '.parse';
+      if (s.parseStyle === 'bytes') {
+        fn = '.parseBytes';
+        call = function () { return format.parseBytes(value, locale, o); };
+      } else {
+        fn = '.parse';
+        call = function () { return format.parse(value, locale, o); };
+      }
       args = [q(value), q(locale)];
-      call = function () { return format.parse(value, locale, o); };
     } else {
       var tunable = s.mode !== 'bytes';
       if (tunable && s.minFrac !== '') o.minimumFractionDigits = Number(s.minFrac);
@@ -540,6 +552,10 @@
       return 'Decimals must be a whole number from 0 to 20. Change the values under Fine-tune.';
     }
     if (e instanceof TypeError && /binary units/.test(m)) return 'Names written out in full are not available with 1024-based units. Untick one of the two options.';
+    if (s.direction === 'parse' && s.parseStyle === 'bytes') {
+      if (/bits/.test(m)) return 'A lowercase b after a capital letter, as in “Mb”, means bits, and this reads bytes only. Write “MB” if you mean megabytes.';
+      return 'This text cannot be read as a file size. Write a number and a unit, such as 1.5 MB, 300 kB or 2 GiB, and check that its separators match the country you picked.';
+    }
     if (s.direction === 'parse') {
       return 'This text cannot be read as one number in this locale. Check that its separators match the country you picked, and that the choice in step 3 fits the text.';
     }
@@ -615,7 +631,8 @@
       $('error').hidden = true;
       $('error').textContent = '';
       $('out').hidden = false;
-      showResult(text, parts);
+      var shown = s.direction === 'parse' && s.parseStyle === 'bytes' && typeof result === 'number' ? text + ' bytes' : text;
+      showResult(shown, parts);
       $('spaceNote').hidden = !/[  ]/.test(text);
     } catch (e) {
       failed = true;
@@ -645,6 +662,7 @@
     var money = (!parse && s.mode === 'currency') || (parse && s.parseStyle === 'currency');
     $('s-currency').hidden = !money;
     $('s-bytes').hidden = parse || s.mode !== 'bytes';
+    $('s-readbytes').hidden = !parse || s.parseStyle !== 'bytes';
     $('s-decimals').hidden = parse || s.mode === 'bytes';
     $('s-sign').hidden = parse || s.mode === 'bytes';
     $('s-fallback').hidden = parse;
@@ -655,7 +673,7 @@
       ? 'The separators depend on this: in Germany 1.234,5 means one thousand two hundred and thirty-four and a half.'
       : 'The language and country decide the separators, the symbols and the grouping.';
     $('h-value').textContent = parse
-      ? 'Paste or type text as a person would write it, such as 1.234,50 € or 25 %.'
+      ? 'Paste or type text as a person would write it, such as 1.234,50 € or 25 %. For file sizes: 1.5 MB or 300 KiB.'
       : (s.mode === 'bytes' ? 'For example 1536 or 5242880.' : 'Digits only, with a dot for decimals. Very long numbers are fine.');
     var chips = document.querySelectorAll('#chips .chip');
     for (var i = 0; i < chips.length; i++) chips[i].setAttribute('aria-pressed', 'false');
@@ -696,6 +714,7 @@
       if (s.parseStyle === 'currency') return format.currency(1234.5, cur, locale);
       if (s.parseStyle === 'percent') return format.percent(0.256, locale, { maximumFractionDigits: 1 });
       if (s.parseStyle === 'compact') return format.compact(1200000, locale);
+      if (s.parseStyle === 'bytes') return format.bytes(1500000, locale);
       return format(1234.56, locale);
     } catch (e) { return '1,234.56'; }
   }

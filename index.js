@@ -5,6 +5,7 @@ const MAX_CACHED_FORMATTERS = 100;
 const NUMERIC_STRING = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 const BYTE_UNITS = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
 const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+const IEC_NAMES = ['byte', 'kibibyte', 'mebibyte', 'gibibyte', 'tebibyte', 'pebibyte'];
 const LONG_BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte'];
 
 /** Marks errors caused by "no usable value", which a `fallback` option is allowed to replace. */
@@ -464,6 +465,41 @@ function compactTokens(locale, info) {
   });
 }
 
+/**
+ * Size units mapped to `[token, power, iec]`, longest first: the power of 1000 (or 1024) they stand for,
+ * and whether they are always 1024-based (`KiB`) rather than following the `binary` option (`KB`).
+ * `format.bytes` always writes English labels, so those are always understood; the locale's own names
+ * ("ko" in French, "Kilobyte" in German) are read from Intl.
+ */
+function byteTokens(locale) {
+  return memoise(locale, 'bytes', () => {
+    const tokens = new Map();
+    const add = (token, power, iec) => {
+      const key = token.replace(BIDI_MARKS, '').trim().toLowerCase();
+      if (!tokens.has(key)) tokens.set(key, [key, power, iec]);
+    };
+    BYTE_UNITS.forEach((label, power) => {
+      add(label, power, false);
+      add(BINARY_UNITS[power], power, true);
+      if (power > 0) {
+        add(IEC_NAMES[power], power, true);
+        add(`${IEC_NAMES[power]}s`, power, true);
+      }
+    });
+    for (const code of [locale, 'en']) {
+      LONG_BYTE_UNITS.forEach((unit, power) => {
+        for (const unitDisplay of ['short', 'narrow', 'long']) {
+          const formatter = getFormatter(code, { style: 'unit', unit, unitDisplay });
+          for (const amount of CURRENCY_NAME_AMOUNTS) {
+            for (const part of formatter.formatToParts(amount)) if (part.type === 'unit') add(part.value, power, false);
+          }
+        }
+      });
+    }
+    return [...tokens.values()].sort((a, b) => b[0].length - a[0].length);
+  });
+}
+
 // Tokens keep their original case so slice lengths match; "İ" lower-cases to two characters, which
 // would break a comparison done on a lower-cased token.
 const startsWithToken = (text, token) => text.slice(0, token.length).toLowerCase() === token.toLowerCase();
@@ -524,6 +560,8 @@ function prepareParse(locale, options) {
     currencyTokens: style === 'currency' ? currencyTokens(resolved, currency) : null,
     percentTokens: style === 'percent' ? percentTokens(resolved) : null,
     compactTokens: notation === 'compact' ? compactTokens(resolved, info) : null,
+    byteTokens: null,
+    binary: false,
     hasFallback: options != null && 'fallback' in options,
     fallback: options == null ? undefined : options.fallback,
   };
@@ -570,6 +608,22 @@ function parseText(text, plan) {
       break;
     }
   }
+  let scale = 1;
+  if (plan.byteTokens !== null) {
+    // The unit follows the number almost everywhere; Hausa writes "kilobytes 1.5".
+    const after = plan.byteTokens.find(([token]) => endsWithToken(rest, token));
+    const found = after !== undefined ? after : plan.byteTokens.find(([token]) => startsWithToken(rest, token));
+    if (found !== undefined) {
+      const [token, power, iec] = found;
+      const atEnd = after !== undefined;
+      const written = atEnd ? rest.slice(rest.length - token.length) : rest.slice(0, token.length);
+      // "Mb" and "Kib" are megabits and kibibits by convention; reading them as bytes would be off by 8.
+      if (/^[KMGTP]i?b$/.test(written)) throw invalid(`"${written}" means bits; write "${written.slice(0, -1)}B" for bytes`);
+      rest = (atEnd ? rest.slice(0, rest.length - token.length) : rest.slice(token.length)).trim();
+      if (iec || plan.binary) scale = 1024 ** power;
+      else exponent += 3 * power;
+    }
+  }
   // A sign may also follow the currency symbol: "$-5.00".
   if (sign === 0) [rest, sign] = takeSign(rest, info);
   if (sign === 0 && info.trailingMinus) {
@@ -609,7 +663,7 @@ function parseText(text, plan) {
   if (segments.length > 1) checkGrouping(segments, info);
 
   // The exponent is applied in the string so 25.6% is exactly 0.256, not 0.25600000000000006.
-  const value = Number(`${integer || '0'}${fraction ? `.${fraction}` : ''}e${exponent}`);
+  const value = Number(`${integer || '0'}${fraction ? `.${fraction}` : ''}e${exponent}`) * scale;
   if (!Number.isFinite(value)) throw soft(new RangeError('the number is too large'));
   return sign < 0 && value !== 0 ? -value : value;
 }
@@ -639,6 +693,24 @@ function parseWith(text, plan) {
 }
 
 /**
+ * Reads a file size such as `'1.5 MB'` or `'1,5 Ko'` into a number of bytes. Units are B, kB, MB, GB, TB
+ * and PB (1000-based), KiB to PiB (always 1024-based), their English names, and the locale's own names.
+ * `binary: true` reads KB, MB... as 1024-based. Text with no unit is bytes. The result is not rounded.
+ *
+ * @param {string} text
+ * @param {string | string[] | Intl.Locale} [locale='en-US']
+ * @param {{ binary?: boolean, fallback?: unknown }} [options]
+ * @returns {number}
+ */
+function parseBytes(text, locale, options) {
+  assertOptions(options);
+  const plan = prepareParse(locale, options != null && 'fallback' in options ? { fallback: options.fallback } : undefined);
+  plan.byteTokens = byteTokens(resolveLocale(locale));
+  plan.binary = Boolean(options && options.binary);
+  return parseWith(text, plan);
+}
+
+/**
  * Builds a reusable parser. The locale and options are validated, and the locale data looked up,
  * once up front, so it suits parsing a whole column of text. Options are read when it is created.
  *
@@ -661,6 +733,7 @@ module.exports.compact = compact;
 module.exports.signed = signed;
 module.exports.bytes = bytes;
 module.exports.parse = parse;
+module.exports.parseBytes = parseBytes;
 module.exports.createParser = createParser;
 module.exports.formatToParts = formatToParts;
 module.exports.formatRange = formatRange;

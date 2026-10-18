@@ -54,6 +54,15 @@ cases.push({
   maxRatio: 40, // parsing does far more than Number() (about 4x here); this catches a collapse
 });
 
+const sizeTexts = ['1.5 MB', '300 kB', '2 GiB', '12 B'];
+const sizePattern = /^([\d.]+)\s*([kKMGTP]?i?B)$/;
+cases.push({
+  name: 'parseBytes(text) vs one regular expression and Number()',
+  ours: (i) => nf.parseBytes(sizeTexts[i % sizeTexts.length]),
+  base: (i) => Number(sizePattern.exec(sizeTexts[i % sizeTexts.length])[1]) * 1000,
+  maxRatio: 80, // about 18x here: it also knows locales, units in many languages and rejects bad text
+});
+
 let failed = false;
 for (const c of cases) {
   c.ours(0); // warm up

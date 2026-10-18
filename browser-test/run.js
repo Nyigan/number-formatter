@@ -54,6 +54,7 @@ async function main() {
     out.parseCompact = nf.parse('1.2M', 'en-US', { notation: 'compact' });
     out.roundTrip = nf.parse(nf(-9876543.21, 'fr-FR'), 'fr-FR');
     out.parser = nf.createParser('de-DE')('1.000,5');
+    out.parseBytes = nf.parseBytes('1,5 MiB', 'de-DE');
     out.parts = nf.formatToParts(1234.5, 'en-US').map((p) => p.type).join(',');
     out.range = nf.formatRange(1000, 2000, 'en-US');
     out.formatter = nf.createFormatter('ja-JP', { style: 'currency', currency: 'JPY' })(5000);
@@ -67,9 +68,10 @@ async function main() {
 
   assert.deepEqual(results.api, [
     'bytes', 'compact', 'createFormatter', 'createParser', 'currency', 'default',
-    'formatNumber', 'formatRange', 'formatToParts', 'parse', 'percent', 'signed',
+    'formatNumber', 'formatRange', 'formatToParts', 'parse', 'parseBytes', 'percent', 'signed',
   ]);
   assert.equal(results.basic, '1,234,567.891');
+  assert.equal(results.parseBytes, 1572864);
   assert.equal(results.german, '1.234.567,891');
   assert.equal(results.currency, '$1,234.50');
   assert.match(results.euro, /^1\.234,50\s€$/);
@@ -129,6 +131,23 @@ async function main() {
   state = await shown();
   assert.equal(state.out, '1234.5');
   assert.match(state.code, /format\.parse\('1\.234,50\s€', 'de-DE', \{ style: 'currency', currency: 'EUR' \}\)/);
+  // Reading a file size: the example, the 1024 option, a unit that means bits, and a locale's own number format.
+  await playground.click('button[data-example=read-size]');
+  state = await shown();
+  assert.equal(state.out, '1500000 bytes');
+  assert.match(state.code, /format\.parseBytes\('1\.5 MB', 'en-US'\)/);
+  assert.equal(await playground.isVisible('#s-readbytes'), true);
+  await playground.check('#binaryRead', { force: true });
+  state = await shown();
+  assert.equal(state.out, '1572864 bytes');
+  assert.match(state.code, /\{ binary: true \}/);
+  await playground.fill('#value', '5 Mb');
+  state = await shown();
+  assert.match(state.error, /bits/);
+  await playground.selectOption('#locale', 'de-DE');
+  await playground.fill('#value', '1,5 Kilobyte');
+  state = await shown();
+  assert.equal(state.out, '1536 bytes');
   await playground.check('input[name=direction][value=format]', { force: true });
   await playground.selectOption('#locale', 'other');
   await playground.fill('#localeOther', 'zz zz!!');

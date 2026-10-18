@@ -43,6 +43,24 @@ declare namespace formatNumber {
   ): number | T;
   function parse(text: string, locale?: Locale, options?: Intl.NumberFormatOptions | null): number;
 
+  interface ParseBytesOptions {
+    /** Read `KB`, `MB`... as 1024-based. `KiB`, `MiB`... are always 1024-based. */
+    binary?: boolean;
+  }
+
+  /**
+   * Reads a file size such as `'1.5 MB'` or `'1,5 Ko'` into a number of bytes: `B`, `kB` to `PB`
+   * (1000-based), `KiB` to `PiB` (1024-based), their English names, and the locale's own names. Text
+   * without a unit is bytes. The result is not rounded. Throws a `TypeError` for text that is not a size
+   * (`'5 Mb'` is megabits, so it is refused); with `fallback`, returns that value instead.
+   */
+  function parseBytes<T>(
+    text: string | null | undefined,
+    locale: Locale | undefined,
+    options: ParseBytesOptions & { fallback: T }
+  ): number | T;
+  function parseBytes(text: string, locale?: Locale, options?: ParseBytesOptions | null): number;
+
   /**
    * Builds a reusable parser. Locale and options are validated and looked up once, up front, and read
    * when it is created.
@@ -97,10 +115,12 @@ declare namespace formatNumber {
     signed,
     bytes,
     parse,
+    parseBytes,
     createParser,
     formatToParts,
     formatRange,
     BytesOptions,
+    ParseBytesOptions,
   };
 }
 

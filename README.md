@@ -48,6 +48,8 @@ format.parse('$1,234.50', 'en-US', { style: 'currency', currency: 'USD' }); // 1
 format.parse('25.6%', 'en-US', { style: 'percent' });                        // 0.256
 format.parse('1.2K', 'en-US', { notation: 'compact' });                      // 1200
 format.parse('abc', 'en-US', { fallback: NaN });                             // NaN
+format.parseBytes('1.5 MB');              // 1500000  (file sizes back into bytes)
+format.parseBytes('1,5 MiB', 'de-DE');    // 1572864
 
 // Parsing a whole column: validate once, reuse.
 const toEuros = format.createParser('de-DE', { style: 'currency', currency: 'EUR' });
@@ -153,6 +155,39 @@ A minus sign after the number (`5-`) is read only in locales that write it there
 
 With `fallback` set, the call returns that string instead of throwing when the value is `null`, `undefined`, `NaN`, an infinity or a non-numeric string (`''`, `'N/A'`). Genuine mistakes, such as passing an object or a boolean, still throw.
 
+### `format.parseBytes(text, [locale], [options])`
+
+Reads a file size back into a number of bytes: the inverse of `format.bytes`. `'1.5 MB'` is `1500000`, `'1,5 MiB'` in `de-DE` is `1572864`.
+
+| Argument | Notes |
+|---|---|
+| `text` | A number and a unit: `'1.5 MB'`, `'300kB'`, `'2 GiB'`, `'1.5 megabytes'`. Text with no unit is bytes. |
+| `locale` | Same as `parse`: it decides what `1,5` and `1.234` mean, and which local unit names are understood. |
+| `options` | `{ binary: true }` reads `KB`, `MB`... as 1024-based. `{ fallback }` is returned instead of throwing, as for `parse`. |
+
+Units:
+
+- **`B`, `kB` (or `KB`), `MB`, `GB`, `TB`, `PB`** are 1000-based, the same as `format.bytes` writes them.
+- **`KiB`, `MiB`, `GiB`, `TiB`, `PiB`** are always 1024-based, whatever `binary` says. So `parseBytes(format.bytes(n, locale, { binary: true }), locale)` needs no options.
+- **Names:** English (`kilobytes`, `mebibytes`) and the locale's own (`Kilobyte` in German, `ko` in French, `キロバイト` in Japanese).
+- Case does not matter (`1.5 mb`), and the space before the unit is optional.
+- **`Mb`, `Gb`, `Kib` and the like are refused.** A capital letter followed by a lowercase `b` conventionally means bits, and reading it as bytes would be wrong by a factor of eight. Write `MB` for bytes; all-lowercase `mb` and `kb` are read as bytes, as people write them.
+
+The result is not rounded: `'0.5 B'` is `0.5`. Decimal units are exact (`'1.1 kB'` is `1100`, not `1100.0000000000002`). A size that does not fit a number (hundreds of digits) throws a `RangeError`, or gives the `fallback`.
+
+```js
+format.parseBytes('1.5 MB');                                   // 1500000
+format.parseBytes('1.5 MB', 'en-US', { binary: true });        // 1572864
+format.parseBytes('1.5 MiB');                                  // 1572864
+format.parseBytes('1,5 Kilobyte', 'de-DE');                    // 1500
+format.parseBytes('5 Mb');                                     // throws: megabits, not megabytes
+format.parseBytes('lots', 'en-US', { fallback: null });        // null
+```
+
+Text must contain a number: a bare unit such as `'MB'` is an error. (One older ICU build, in Node 22.0, writes a single megabyte in Hebrew as the bare word; that form is not read.)
+
+`format.bytes` rounds, so a round trip returns the size as written, not the original: `parseBytes(format.bytes(1536))` is `1500`. With enough decimals, or for sizes that are exact in the unit, it is the same number.
+
 ### Behaviour worth knowing
 
 - **The default locale is always `en-US`**, not the machine's, so output is the same everywhere.
@@ -233,6 +268,7 @@ format.formatToParts(1234.56, 'en-US')
 
 ```js
 format.bytes(5242880);                                           // '5.2 MB'
+format.parseBytes('5.2 MB');                                     // 5200000
 format.bytes(1536, 'de-DE', { unitDisplay: 'long' });            // '1,5 Kilobyte'
 format.formatRange(10, 20, 'en-US', { style: 'currency', currency: 'USD' });   // '$10.00 – $20.00'
 ```

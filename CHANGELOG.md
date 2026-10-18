@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+- `parseBytes(text, [locale], [options])`: reads a file size back into bytes, the inverse of `bytes`. `'1.5 MB'` is `1500000`; `'1,5 MiB'` in `de-DE` is `1572864`.
+  - `B`, `kB`/`KB` to `PB` are 1000-based; `KiB` to `PiB` are always 1024-based; `{ binary: true }` reads `KB`, `MB`... as 1024-based.
+  - Understands English unit names and each locale's own (`Kilobyte`, `ko`, `キロバイト`), in short, narrow and long forms, and locales that put the unit first (Hausa).
+  - Refuses `Mb`, `Gb`, `Kib` and the like, which conventionally mean bits, instead of reading them as bytes (off by a factor of eight).
+  - Exact for decimal units (`'1.1 kB'` is `1100`), not rounded, and `fallback` works as for `parse`.
+  - Reads back what `bytes` wrote in all 609 locales of Node 22 and 24, in short, long and binary form.
+- The playground can read file sizes ("Read a number from text", then "A file size").
+
 ## 1.3.0
 
 Versions 1.2.1 and Unreleased were never published; everything from them is part of this release.

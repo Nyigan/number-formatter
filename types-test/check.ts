@@ -1,4 +1,4 @@
-import format, { formatNumber, createFormatter, currency, percent, compact, signed, bytes, parse, createParser, formatToParts, formatRange } from '../index';
+import format, { formatNumber, createFormatter, currency, percent, compact, signed, bytes, parse, parseBytes, createParser, formatToParts, formatRange } from '../index';
 
 const a: string = format(1);
 const b: string = formatNumber(1n, 'de-DE', { style: 'percent' });
@@ -50,3 +50,18 @@ format(1, 'en-US', { fallback: 0 });
 currency(1);
 
 export { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s };
+
+const pb1: number = parseBytes('1.5 MB');
+const pb2: number = parseBytes('1,5 Ko', 'fr', { binary: true });
+const pb3: number | null = parseBytes(null, 'en', { fallback: null });
+const pb4: number | string = parseBytes('x', undefined, { fallback: 'n/a' });
+const pb5: number = format.parseBytes('1 KiB', 'en-US', null);
+// @ts-expect-error parseBytes needs a string
+parseBytes(5);
+// @ts-expect-error null needs a fallback
+parseBytes(null);
+// @ts-expect-error binary must be a boolean
+parseBytes('1 KB', 'en', { binary: 'yes' });
+// @ts-expect-error a fallback does not allow other types
+parseBytes(5, 'en-US', { fallback: 0 });
+export { pb1, pb2, pb3, pb4, pb5 };
